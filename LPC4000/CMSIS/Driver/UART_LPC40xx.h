@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ *
+ * $Date:        15. Januar 2020
+ * $Revision:    V1.3
  *
  * Project:      UART Driver Definitions for NXP LPC40xx
  * -------------------------------------------------------------------------- */
@@ -24,12 +26,15 @@
 #ifndef __USART_LPC40XX_H
 #define __USART_LPC40XX_H
 
+#include "Driver_USART.h"
 #include "LPC407x_8x_177x_8x.h"
 
-#include "Driver_USART.h"
 
 #include "PIN_LPC40xx.h"
 #include "GPDMA_LPC40xx.h"
+
+#include "RTE_Device.h"
+#include "RTE_Components.h"
 
 // USART register interface definitions
 // USART Divisor Latch register LSB
@@ -195,15 +200,16 @@
 #define USART_TRIG_LVL_8             (0x80U)
 #define USART_TRIG_LVL_14            (0xC0U)
 
-#define FRACT_DIV(add, mul)      { ((uint16_t)((1U << 12) + (((uint32_t)(add << 24) / (mul)) >> 12))), ((uint8_t) (((mul) << 4) | add)), }
+#define FRACT_DIV(add, mul)      { ((uint16_t)((1U << 12) + (((uint32_t)(add << 24) / (mul)) >> 12))), ((uint8_t) (((mul) << 4) | add)), 0U,}
 
-typedef struct _FRACT_DIV {
+typedef struct {
   uint16_t val;
   uint8_t  add_mul;
+  uint8_t  reserved;
 } FRACT_DIVIDER;
 
 // USART Transfer Information (Run-Time)
-typedef struct _USART_TRANSFER_INFO {
+typedef struct {
   uint32_t                rx_num;        // Total number of data to be received
   uint32_t                tx_num;        // Total number of data to be send
   uint8_t                *rx_buf;        // Pointer to in data buffer
@@ -214,77 +220,99 @@ typedef struct _USART_TRANSFER_INFO {
   uint8_t                 rx_dump_val;   // Receive dump value (used in USART_SYNC_MASTER_MODE_TX)
   uint8_t                 send_active;   // Send active flag
   uint8_t                 sync_mode;     // Synchronous mode
+  uint8_t                 tx_fifo_level; // Number of items in transmit FIFO
+  uint8_t                 reserved[3];   // Reserved
 } USART_TRANSFER_INFO;
 
-typedef struct _USART_RX_STATUS {
+typedef struct {
   uint8_t rx_busy;                       // Receiver busy flag
   uint8_t rx_overflow;                   // Receive data overflow detected (cleared on start of next receive operation)
   uint8_t rx_break;                      // Break detected on receive (cleared on start of next receive operation)
   uint8_t rx_framing_error;              // Framing error detected on receive (cleared on start of next receive operation)
   uint8_t rx_parity_error;               // Parity error detected on receive (cleared on start of next receive operation)
+  uint8_t reserved[3];
 } USART_RX_STATUS;
 
 // USART Information (Run-Time)
-typedef struct _USART_INFO {
+typedef struct {
   ARM_USART_SignalEvent_t cb_event;      // Event callback
   USART_RX_STATUS         rx_status;     // Receive status flags
   USART_TRANSFER_INFO     xfer;          // Transfer information
+  uint32_t                baudrate;      // Baudrate
   uint8_t                 mode;          // USART mode
   uint8_t                 flags;         // USART driver flags
-  uint32_t                baudrate;      // Baudrate
+  uint8_t                 reserved[2];
 } USART_INFO;
 
 // USART DMA
-typedef const struct _USART_DMA {
+typedef const struct {
   uint8_t                 channel;       // DMA Channel number
   uint8_t                 request;       // DMA Request number
   uint8_t                 select;        // DMA Request select number
+  uint8_t                 reserved;
   GPDMA_SignalEvent_t     cb_event;      // DMA Event callback
 } USART_DMA;
 
 // USART Pin Configuration
-typedef const struct _USART_PINS {
-        PIN                       *pin_tx;            // TX  Pin identifier
-        PIN                       *pin_rx;            // RX  Pin identifier
-        PIN                       *pin_clk;           // CLK  Pin identifier
-        PIN                       *pin_cts;           // CTS Pin identifier
-        PIN                       *pin_rts;           // RTS Pin identifier
-        PIN                       *pin_dcd;           // DCD Pin identifier
-        PIN                       *pin_dsr;           // DSR Pin identifier
-        PIN                       *pin_dtr;           // DTR Pin identifier
-        PIN                       *pin_ri;            // RI  Pin identifier
-        uint8_t                   func_tx;            // TX  Pin function
-        uint8_t                   func_rx;            // RX  Pin function
-        uint8_t                   func_clk;           // CLK Pin function
-        uint8_t                   func_cts;           // CTS Pin function
-        uint8_t                   func_rts;           // RTS Pin function
-        uint8_t                   func_dcd;           // DCD Pin function
-        uint8_t                   func_dsr;           // DSR Pin function
-        uint8_t                   func_dtr;           // DTR Pin function
-        uint8_t                   func_ri;            // RI  Pin function
+typedef const struct {
+  const PIN              *pin_tx;        // TX  Pin identifier
+  const PIN              *pin_rx;        // RX  Pin identifier
+  const PIN              *pin_clk;       // CLK  Pin identifier
+  const PIN              *pin_cts;       // CTS Pin identifier
+  const PIN              *pin_rts;       // RTS Pin identifier
+  const PIN              *pin_dcd;       // DCD Pin identifier
+  const PIN              *pin_dsr;       // DSR Pin identifier
+  const PIN              *pin_dtr;       // DTR Pin identifier
+  const PIN              *pin_ri;        // RI  Pin identifier
+  uint8_t                 func_tx;       // TX  Pin function
+  uint8_t                 func_rx;       // RX  Pin function
+  uint8_t                 func_clk;      // CLK Pin function
+  uint8_t                 func_cts;      // CTS Pin function
+  uint8_t                 func_rts;      // RTS Pin function
+  uint8_t                 func_dcd;      // DCD Pin function
+  uint8_t                 func_dsr;      // DSR Pin function
+  uint8_t                 func_dtr;      // DTR Pin function
+  uint8_t                 func_ri;       // RI  Pin function
+  uint8_t                 reserved[3];   // Reserved
 } USART_PINS;
 
 // USART Clocks Configuration
-typedef const struct _USART_CLOCK {
+typedef const struct {
   uint32_t              reg_pwr_val;        // UART block power control register value
   volatile uint32_t    *reg_pwr;            // UART block power control  register
 } USART_CLOCKS;
 
 
 // USART Resources definitions
-typedef struct {
+typedef const struct {
   ARM_USART_CAPABILITIES  capabilities;  // Capabilities
   LPC_UART_TypeDef        *reg;          // Pointer to USART peripheral
   LPC_UART1_TypeDef       *uart_reg;     // Pointer to UART peripheral
   LPC_UART4_TypeDef       *uart4_reg;    // Pointer to UART4 peripheral
   USART_PINS              pins;          // USART pins configuration
   USART_CLOCKS            clk;           // USART clocks configuration
-  IRQn_Type               irq_num;       // USART IRQ Number
+  int32_t                 irq_num;       // USART IRQ Number
   uint32_t                trig_lvl;      // FIFO Trigger level
   USART_DMA              *dma_tx;
   USART_DMA              *dma_rx;
   USART_INFO             *info;          // Run-Time Information
   float                   sc_oversamp;   // SmartCard oversampling ratio
-} const USART_RESOURCES;
+} USART_RESOURCES;
 
+// Global functions and variables exported by driver .c module */
+#if (RTE_UART0)
+extern ARM_DRIVER_USART Driver_USART0;
+#endif
+#if (RTE_UART1)
+extern ARM_DRIVER_USART Driver_USART1;
+#endif
+#if (RTE_UART2)
+extern ARM_DRIVER_USART Driver_USART2;
+#endif
+#if (RTE_UART3)
+extern ARM_DRIVER_USART Driver_USART3;
+#endif
+#if (RTE_UART4)
+extern ARM_DRIVER_USART Driver_USART4;
+#endif
 #endif /* __USART_LPC40XX_H */

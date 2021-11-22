@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ *
+ * $Date:        15. Januar 2020
+ * $Revision:    V1.5
  *
  * Driver:       Driver_ETH_MAC0
  * Configured:   via RTE_Device.h configuration file
@@ -31,47 +33,62 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.5
+ *    - Removed minor compiler warnings
+ *  Version 1.4
+ *    - Added support for ARM Compiler 6
+ *  Version 1.3
+ *    - Enabling the Power Down mode setting of the PHY is prevented
+ *      to avoid PHY from stopping to generate needed clocks
+ *  Version 1.2
+ *    - Corrected timeout implementation for RTOS2
+ *  Version 1.1
+ *    - Added support for CMSIS-RTOS2
  *  Version 1.0
  *    - Initial release
  */
 
 #include "EMAC_LPC40xx.h"
 
-#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,0) /* driver version */
+#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,5) /* driver version */
+
+extern ARM_DRIVER_ETH_MAC Driver_ETH_MAC0;
+/* Interrupt Handler Prototype */
+void ENET_IRQHandler (void);
 
 /* Timeouts */
-#define PHY_TIMEOUT         500         /* PHY Register access timeout in us  */
+#define PHY_TIMEOUT         500U        /* PHY Register access timeout in us  */
 
 /* EMAC Memory Buffer configuration for 16K Ethernet RAM */
-#define NUM_RX_BUF          4           /* 0x1800 for Rx (4*1536=6.0K)        */
-#define NUM_TX_BUF          3           /* 0x1200 for Tx (3*1536=4.6K)        */
-#define ETH_BUF_SIZE        1536        /* ETH Receive/Transmit buffer size   */
+#define NUM_RX_BUF          4U          /* 0x1800 for Rx (4*1536=6.0K)        */
+#define NUM_TX_BUF          3U          /* 0x1200 for Tx (3*1536=4.6K)        */
+#define ETH_BUF_SIZE        1536U       /* ETH Receive/Transmit buffer size   */
 
 /* Ethernet Pin definitions */
 static const ETH_PIN eth_pins[] = {
-  { ETH_MDC_PORT,    ETH_MDC_PIN,    ETH_MDC_CFG    },    /* MII, RMII */
-  { ETH_MDIO_PORT,   ETH_MDIO_PIN,   ETH_MDIO_CFG   },    /* MII, RMII */
-  { ETH_TXD0_PORT,   ETH_TXD0_PIN,   ETH_TXD0_CFG   },    /* MII, RMII */
-  { ETH_TXD1_PORT,   ETH_TXD1_PIN,   ETH_TXD1_CFG   },    /* MII, RMII */
-  { ETH_RXD0_PORT,   ETH_RXD0_PIN,   ETH_RXD0_CFG   },    /* MII, RMII */
-  { ETH_RXD1_PORT,   ETH_RXD1_PIN,   ETH_RXD1_CFG   },    /* MII, RMII */
-  { ETH_TX_EN_PORT,  ETH_TX_EN_PIN,  ETH_TX_EN_CFG  },    /* MII, RMII */
-  { ETH_RX_ER_PORT,  ETH_RX_ER_PIN,  ETH_RX_ER_CFG  },    /* MII, RMII */
-  { ETH_CRS_PORT,    ETH_CRS_PIN,    ETH_CRS_CFG    },    /* MII, RMII */
+  { ETH_MDC_PORT,    ETH_MDC_PIN,    ETH_MDC_CFG,  0U },    /* MII, RMII */
+  { ETH_MDIO_PORT,   ETH_MDIO_PIN,   ETH_MDIO_CFG, 0U },    /* MII, RMII */
+  { ETH_TXD0_PORT,   ETH_TXD0_PIN,   ETH_TXD0_CFG, 0U },    /* MII, RMII */
+  { ETH_TXD1_PORT,   ETH_TXD1_PIN,   ETH_TXD1_CFG, 0U },    /* MII, RMII */
+  { ETH_RXD0_PORT,   ETH_RXD0_PIN,   ETH_RXD0_CFG, 0U },    /* MII, RMII */
+  { ETH_RXD1_PORT,   ETH_RXD1_PIN,   ETH_RXD1_CFG, 0U },    /* MII, RMII */
+  { ETH_TX_EN_PORT,  ETH_TX_EN_PIN,  ETH_TX_EN_CFG,0U },    /* MII, RMII */
+  { ETH_RX_ER_PORT,  ETH_RX_ER_PIN,  ETH_RX_ER_CFG,0U },    /* MII, RMII */
+  { ETH_CRS_PORT,    ETH_CRS_PIN,    ETH_CRS_CFG,  0U },    /* MII, RMII */
 #if (ETH_MII)
-  { ETH_TXD2_PORT,   ETH_TXD2_PIN    ETH_TXD2_CFG   },    /* MII, ---- */
-  { ETH_TXD3_PORT,   ETH_TXD3_PIN    ETH_TXD3_CFG   },    /* MII, ---- */
-  { ETH_RXD2_PORT,   ETH_RXD2_PIN    ETH_RXD2_CFG   },    /* MII, ---- */
-  { ETH_RXD3_PORT,   ETH_RXD3_PIN,   ETH_RXD3_CFG   },    /* MII, ---- */
-  { ETH_TX_CLK_PORT, ETH_TX_CLK_PIN, ETH_TX_CLK_CFG },    /* MII, ---- */
-  { ETH_RX_CLK_PORT, ETH_RX_CLK_PIN, ETH_RX_CLK_CFG },    /* MII, ---- */
-  { ETH_COL_PORT,    ETH_COL_PIN,    ETH_COL_CFG    },    /* MII, ---- */
-  { ETH_RX_DV_PORT,  ETH_RX_DV_PIN,  ETH_RX_DV_CFG  },    /* MII, ---- */
+  { ETH_TXD2_PORT,   ETH_TXD2_PIN    ETH_TXD2_CFG, 0U },    /* MII, ---- */
+  { ETH_TXD3_PORT,   ETH_TXD3_PIN    ETH_TXD3_CFG, 0U },    /* MII, ---- */
+  { ETH_RXD2_PORT,   ETH_RXD2_PIN    ETH_RXD2_CFG, 0U },    /* MII, ---- */
+  { ETH_RXD3_PORT,   ETH_RXD3_PIN,   ETH_RXD3_CFG, 0U },    /* MII, ---- */
+  { ETH_TX_CLK_PORT, ETH_TX_CLK_PIN, ETH_TX_CLK_CFG,0U },   /* MII, ---- */
+  { ETH_RX_CLK_PORT, ETH_RX_CLK_PIN, ETH_RX_CLK_CFG,0U },   /* MII, ---- */
+  { ETH_COL_PORT,    ETH_COL_PIN,    ETH_COL_CFG,  0U },    /* MII, ---- */
+  { ETH_RX_DV_PORT,  ETH_RX_DV_PIN,  ETH_RX_DV_CFG, 0U },   /* MII, ---- */
   #if defined(ETH_TX_ER_PORT)
-  { ETH_TX_ER_PORT,  ETH_TX_ER_PIN,  ETH_TX_ER_CFG  },    /* MII, ---- */
+  { ETH_TX_ER_PORT,  ETH_TX_ER_PIN,  ETH_TX_ER_CFG, 0U },   /* MII, ---- */
   #endif
 #else
-  { ETH_REF_CLK_PORT, ETH_REF_CLK_PIN, ETH_REF_CLK_CFG }, /* ---, RMII */
+  { ETH_REF_CLK_PORT, ETH_REF_CLK_PIN, ETH_REF_CLK_CFG,0U },/* ---, RMII */
 #endif
 };
 
@@ -84,27 +101,28 @@ static const ARM_DRIVER_VERSION DriverVersion = {
 
 /* Driver Capabilities */
 static const ARM_ETH_MAC_CAPABILITIES DriverCapabilities = {
-  0,                                /* checksum_offload_rx_ip4  */
-  0,                                /* checksum_offload_rx_ip6  */
-  0,                                /* checksum_offload_rx_udp  */
-  0,                                /* checksum_offload_rx_tcp  */
-  0,                                /* checksum_offload_rx_icmp */
-  0,                                /* checksum_offload_tx_ip4  */
-  0,                                /* checksum_offload_tx_ip6  */
-  0,                                /* checksum_offload_tx_udp  */
-  0,                                /* checksum_offload_tx_tcp  */
-  0,                                /* checksum_offload_tx_icmp */
+  0U,                               /* checksum_offload_rx_ip4  */
+  0U,                               /* checksum_offload_rx_ip6  */
+  0U,                               /* checksum_offload_rx_udp  */
+  0U,                               /* checksum_offload_rx_tcp  */
+  0U,                               /* checksum_offload_rx_icmp */
+  0U,                               /* checksum_offload_tx_ip4  */
+  0U,                               /* checksum_offload_tx_ip6  */
+  0U,                               /* checksum_offload_tx_udp  */
+  0U,                               /* checksum_offload_tx_tcp  */
+  0U,                               /* checksum_offload_tx_icmp */
   ARM_ETH_INTERFACE_RMII,           /* media_interface          */
-  0,                                /* mac_address              */
-  1,                                /* event_rx_frame           */
-  1,                                /* event_tx_frame           */
-  1,                                /* event_wakeup             */
-  0                                 /* precision_timer          */
+  0U,                               /* mac_address              */
+  1U,                               /* event_rx_frame           */
+  1U,                               /* event_tx_frame           */
+  1U,                               /* event_wakeup             */
+  0U,                               /* precision_timer          */
+  0U                                /* reserved                 */
 };
 
 /* EMAC local DMA Descriptors. */
 static            RX_Desc Rx_Desc[NUM_RX_BUF];
-static __align(8) RX_Stat Rx_Stat[NUM_RX_BUF]; /* Must be 8-Byte aligned   */
+static __ALIGNED(8) RX_Stat Rx_Stat[NUM_RX_BUF]; /* Must be 8-Byte aligned   */
 static            TX_Desc Tx_Desc[NUM_TX_BUF];
 static            TX_Stat Tx_Stat[NUM_TX_BUF];
 
@@ -130,20 +148,20 @@ static uint32_t crc32_data (const uint8_t *data, uint32_t len);
 static void init_rx_desc (void) {
   uint32_t i;
 
-  for (i = 0; i < NUM_RX_BUF; i++) {
+  for (i = 0U; i < NUM_RX_BUF; i++) {
     Rx_Desc[i].Packet  = (uint8_t *)&rx_buf[i];
     Rx_Desc[i].Ctrl    = RCTRL_INT | (ETH_BUF_SIZE-1);
-    Rx_Stat[i].Info    = 0;
-    Rx_Stat[i].HashCRC = 0;
+    Rx_Stat[i].Info    = 0U;
+    Rx_Stat[i].HashCRC = 0U;
   }
 
   /* Set EMAC Receive Descriptor Registers */
   LPC_EMAC->RxDescriptor       = (uint32_t)&Rx_Desc[0];
   LPC_EMAC->RxStatus           = (uint32_t)&Rx_Stat[0];
-  LPC_EMAC->RxDescriptorNumber = NUM_RX_BUF-1;
+  LPC_EMAC->RxDescriptorNumber = NUM_RX_BUF-1U;
 
   /* Rx Descriptors Point to 0 */
-  LPC_EMAC->RxConsumeIndex  = 0;
+  LPC_EMAC->RxConsumeIndex  = 0U;
 }
 
 /**
@@ -154,10 +172,10 @@ static void init_rx_desc (void) {
 static void init_tx_desc (void) {
   uint32_t i;
 
-  for (i = 0; i < NUM_TX_BUF; i++) {
+  for (i = 0U; i < NUM_TX_BUF; i++) {
     Tx_Desc[i].Packet = (uint8_t *)&tx_buf[i];
-    Tx_Desc[i].Ctrl   = 0;
-    Tx_Stat[i].Info   = 0;
+    Tx_Desc[i].Ctrl   = 0U;
+    Tx_Stat[i].Info   = 0U;
   }
 
   /* Set EMAC Transmit Descriptor Registers */
@@ -166,7 +184,7 @@ static void init_tx_desc (void) {
   LPC_EMAC->TxDescriptorNumber = NUM_TX_BUF-1;
 
   /* Tx Descriptors Point to 0 */
-  LPC_EMAC->TxProduceIndex  = 0;
+  LPC_EMAC->TxProduceIndex  = 0U;
 }
 
 /**
@@ -180,10 +198,10 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
   uint32_t n;
 
   crc32 ^= __RBIT(val);
-  for (n = 8; n; n--) {
-    if (crc32 & 0x80000000) {
+  for (n = 8U; n; n--) {
+    if (crc32 & 0x80000000U) {
       crc32 <<= 1;
-      crc32  ^= 0x04C11DB7;
+      crc32  ^= 0x04C11DB7U;
     } else {
       crc32 <<= 1;
     }
@@ -201,7 +219,7 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
 static uint32_t crc32_data (const uint8_t *data, uint32_t len) {
   uint32_t crc;
 
-  for (crc = 0xFFFFFFFF; len; len--) {
+  for (crc = 0xFFFFFFFFU; len; len--) {
     crc = crc32_8bit_rev (crc, *data++);
   }
   return (crc);
@@ -262,7 +280,7 @@ static int32_t Uninitialize (void) {
   uint32_t cfg_val;
   const ETH_PIN *io;
 
-  Emac.flags = 0;
+  Emac.flags = 0U;
 
   /* Reset ethernet pins */
   cfg_val = IOCON_MODE_PULLUP | IOCON_HYS_ENABLE;
@@ -283,22 +301,28 @@ static int32_t Uninitialize (void) {
 static int32_t PowerControl (ARM_POWER_STATE state) {
   uint32_t tout,hclk,div;
 
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
+
   switch (state) {
     case ARM_POWER_OFF:
       /* Disable EMAC interrupts */
       NVIC_DisableIRQ(ENET_IRQn);
 
       /* Power Up the EMAC controller. */
-      LPC_SC->PCONP |= 0x40000000;
+      LPC_SC->PCONP |= 0x40000000U;
 
       /* Reset all EMAC internal modules. */
       LPC_EMAC->MAC1 = MAC1_SOFT_RES;
 
       /* A short delay after reset. */
-      for (tout = 10; tout; tout--);
+      for (tout = 10U; tout; tout--);
 
       /* Power Off the EMAC controller. */
-      LPC_SC->PCONP &= ~(0x40000000);
+      LPC_SC->PCONP &= ~(0x40000000U);
 
       Emac.flags &= ~EMAC_FLAG_POWER;
       break;
@@ -315,7 +339,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       }
 
       /* Power Up the EMAC controller. */
-      LPC_SC->PCONP |= 0x40000000;
+      LPC_SC->PCONP |= 0x40000000U;
 
       /* Reset all EMAC internal modules. */
       LPC_EMAC->MAC1    = MAC1_RES_TX     | MAC1_RES_MCS_TX | MAC1_RES_RX   |
@@ -328,7 +352,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       #endif
 
       /* A short delay after reset. */
-      for (tout = 10; tout; tout--);
+      for (tout = 10U; tout; tout--);
 
       /* Initialize MAC control registers. */
       LPC_EMAC->MAC1 = MAC1_PASS_ALL;
@@ -338,16 +362,16 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       LPC_EMAC->IPGR = IPGR_DEF;
 
       LPC_EMAC->MCFG = MCFG_CLK_SEL | MCFG_RES_MII;
-      for (tout = 10; tout; tout--);
+      for (tout = 10U; tout; tout--);
 
       /* MDC clock range selection */
       hclk = SystemCoreClock;
-      if      (hclk > 150000000) div = MCFG_CS_Div64;
-      else if (hclk > 100000000) div = MCFG_CS_Div60;
-      else if (hclk >  60000000) div = MCFG_CS_Div40;
-      else if (hclk >  35000000) div = MCFG_CS_Div28;
-      else if (hclk >  20000000) div = MCFG_CS_Div14;
-      else if (hclk >  10000000) div = MCFG_CS_Div8;
+      if      (hclk > 150000000U) div = MCFG_CS_Div64;
+      else if (hclk > 100000000U) div = MCFG_CS_Div60;
+      else if (hclk >  60000000U) div = MCFG_CS_Div40;
+      else if (hclk >  35000000U) div = MCFG_CS_Div28;
+      else if (hclk >  20000000U) div = MCFG_CS_Div14;
+      else if (hclk >  10000000U) div = MCFG_CS_Div8;
       else                       div = MCFG_CS_Div4;
       LPC_EMAC->MCFG = div;
 
@@ -356,13 +380,13 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       
       /* Reset Reduced MII Logic. */
       LPC_EMAC->SUPP = SUPP_RES_RMII;
-      for (tout = 10; tout; tout--);
-      LPC_EMAC->SUPP = 0;
+      for (tout = 10U; tout; tout--);
+      LPC_EMAC->SUPP = 0U;
 
-      /* Initialize Ethernet MAC Address registers */
-      LPC_EMAC->SA0 = 0x00000000;
-      LPC_EMAC->SA1 = 0x00000000;
-      LPC_EMAC->SA2 = 0x00000000;
+      /* Initilaize Ethernet MAC Address registers */
+      LPC_EMAC->SA0 = 0x00000000U;
+      LPC_EMAC->SA1 = 0x00000000U;
+      LPC_EMAC->SA2 = 0x00000000U;
 
       /* Initialize Tx and Rx DMA Descriptors */
       init_rx_desc ();
@@ -372,7 +396,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       LPC_EMAC->RxFilterCtrl = RFC_PERFECT_EN;
 
       /* Enable EMAC interrupts */
-      LPC_EMAC->IntClear  = 0xFFFF;
+      LPC_EMAC->IntClear  = 0xFFFFU;
       LPC_EMAC->IntEnable = INT_RX_DONE | INT_TX_DONE;
 
       /* Enable ethernet interrupts */
@@ -382,9 +406,6 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       Emac.frame_end = NULL;
       Emac.flags    |= EMAC_FLAG_POWER;
       break;
-
-    default:
-      return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
   
   return ARM_DRIVER_OK;
@@ -409,13 +430,13 @@ static int32_t GetMacAddress (ARM_ETH_MAC_ADDR *ptr_addr) {
 
   val = LPC_EMAC->SA0;
   ptr_addr->b[5] = (uint8_t)(val >> 8);
-  ptr_addr->b[4] = (uint8_t)(val);
+  ptr_addr->b[4] = (uint8_t)val;
   val = LPC_EMAC->SA1;
   ptr_addr->b[3] = (uint8_t)(val >> 8);
-  ptr_addr->b[2] = (uint8_t)(val);
+  ptr_addr->b[2] = (uint8_t)val;
   val = LPC_EMAC->SA2;
   ptr_addr->b[1] = (uint8_t)(val >> 8);
-  ptr_addr->b[0] = (uint8_t)(val);
+  ptr_addr->b[0] = (uint8_t)val;
 
   return ARM_DRIVER_OK;
 }
@@ -437,9 +458,9 @@ static int32_t SetMacAddress (const ARM_ETH_MAC_ADDR *ptr_addr) {
   }
 
   /* Set Ethernet MAC Address registers */
-  LPC_EMAC->SA0 = (ptr_addr->b[5] << 8) | ptr_addr->b[4];
-  LPC_EMAC->SA1 = (ptr_addr->b[3] << 8) | ptr_addr->b[2];
-  LPC_EMAC->SA2 = (ptr_addr->b[1] << 8) | ptr_addr->b[0];
+  LPC_EMAC->SA0 = (uint32_t)(ptr_addr->b[5] << 8) | ptr_addr->b[4];
+  LPC_EMAC->SA1 = (uint32_t)(ptr_addr->b[3] << 8) | ptr_addr->b[2];
+  LPC_EMAC->SA2 = (uint32_t)(ptr_addr->b[1] << 8) | ptr_addr->b[0];
 
   return ARM_DRIVER_OK;
 }
@@ -464,21 +485,21 @@ static int32_t SetAddressFilter (const ARM_ETH_MAC_ADDR *ptr_addr, uint32_t num_
   }
 
   LPC_EMAC->RxFilterCtrl &= ~(RFC_UCAST_HASH_EN | RFC_MCAST_HASH_EN);
-  LPC_EMAC->HashFilterH = 0x00000000;
-  LPC_EMAC->HashFilterL = 0x00000000;
+  LPC_EMAC->HashFilterH = 0x00000000U;
+  LPC_EMAC->HashFilterL = 0x00000000U;
   
-  if (num_addr == 0) {
+  if (num_addr == 0U) {
     return ARM_DRIVER_OK;
   }
 
   /* Calculate 64-bit Hash table for MAC addresses */
   for ( ; num_addr; ptr_addr++, num_addr--) {
-    crc = crc32_data(&ptr_addr->b[0], 6) >> 23;
+    crc = crc32_data(&ptr_addr->b[0], 6U) >> 23;
     if (crc & 0x20) {
-      LPC_EMAC->HashFilterH |= (1 << (crc & 0x1F));
+      LPC_EMAC->HashFilterH |= (1U << (crc & 0x1FU));
     }
     else {
-      LPC_EMAC->HashFilterL |= (1 << (crc & 0x1F));
+      LPC_EMAC->HashFilterL |= (1U << (crc & 0x1FU));
     }
   }
 
@@ -519,15 +540,15 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
     Emac.frame_len += len;
   }
   /* Fast-copy data fragments to EMAC-DMA buffer */
-  for ( ; len > 7; dst += 8, frame += 8, len -= 8) {
-    ((__packed uint32_t *)dst)[0] = ((__packed uint32_t *)frame)[0];
-    ((__packed uint32_t *)dst)[1] = ((__packed uint32_t *)frame)[1];
+  for ( ; len > 7U; dst += 8U, frame += 8U, len -= 8U) {
+    __UNALIGNED_UINT32_WRITE(&dst[0], __UNALIGNED_UINT32_READ(&frame[0]));
+    __UNALIGNED_UINT32_WRITE(&dst[4], __UNALIGNED_UINT32_READ(&frame[4]));
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1; dst += 2, frame += 2, len -= 2) {
-    ((__packed uint16_t *)dst)[0] = ((__packed uint16_t *)frame)[0];
+  for ( ; len > 1U; dst += 2U, frame += 2U, len -= 2U) {
+    __UNALIGNED_UINT16_WRITE(&dst[0], __UNALIGNED_UINT16_READ(&frame[0]));
   }
-  if (len > 0) dst++[0] = frame++[0];
+  if (len > 0U) dst++[0] = frame++[0];
 
   if (flags & ARM_ETH_MAC_TX_FRAME_FRAGMENT) {
     /* More data to come, remember current write position */
@@ -535,13 +556,13 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
     return ARM_DRIVER_OK;
   }
 
-  Tx_Desc[idx].Ctrl = (Emac.frame_len-1) | (TCTRL_INT | TCTRL_LAST);
+  Tx_Desc[idx].Ctrl = (Emac.frame_len-1U) | (TCTRL_INT | TCTRL_LAST);
 
   Emac.frame_end = NULL;
-  Emac.frame_len = 0;
+  Emac.frame_len = 0U;
 
   /* Start frame transmission. */
-  if (++idx == NUM_TX_BUF) idx = 0;
+  if (++idx == NUM_TX_BUF) idx = 0U;
   LPC_EMAC->TxProduceIndex = idx;
 
   return ARM_DRIVER_OK;
@@ -572,17 +593,17 @@ static int32_t ReadFrame (uint8_t *frame, uint32_t len) {
   idx = LPC_EMAC->RxConsumeIndex;
   src = (uint8_t const *)Rx_Desc[idx].Packet;
   /* Fast-copy data to packet buffer */
-  for ( ; len > 7; frame += 8, src += 8, len -= 8) {
-    ((__packed uint32_t *)frame)[0] = ((uint32_t *)src)[0];
-    ((__packed uint32_t *)frame)[1] = ((uint32_t *)src)[1];
+  for ( ; len > 7U; frame += 8U, src += 8U, len -= 8U) {
+    __UNALIGNED_UINT32_WRITE(&frame[0], __UNALIGNED_UINT32_READ(&src[0]));
+    __UNALIGNED_UINT32_WRITE(&frame[4], __UNALIGNED_UINT32_READ(&src[4]));
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1; frame += 2, src += 2, len -= 2) {
-    ((__packed uint16_t *)frame)[0] = ((uint16_t *)src)[0];
+  for ( ; len > 1U; frame += 2U, src += 2U, len -= 2U) {
+    __UNALIGNED_UINT16_WRITE(&frame[0], __UNALIGNED_UINT16_READ(&src[0]));
   }
-  if (len > 0) frame[0] = src[0];
+  if (len > 0U) frame[0] = src[0];
 
-  if (++idx == NUM_RX_BUF) idx = 0;
+  if (++idx == NUM_RX_BUF) idx = 0U;
   /* Release frame from EMAC buffer */
   LPC_EMAC->RxConsumeIndex = idx;
 
@@ -604,16 +625,16 @@ static uint32_t GetRxFrameSize (void) {
   idx = LPC_EMAC->RxConsumeIndex;
   if (idx == LPC_EMAC->RxProduceIndex) {
     /* No packet received */
-    return (0);
+    return (0U);
   }
 
   info = Rx_Stat[idx].Info;
   if (!(info & RINFO_LAST_FLAG) || (info & RINFO_ERR_MASK)) {
     /* Error, this block is invalid */
-    return (0xFFFFFFFF);
+    return (0xFFFFFFFFU);
   }
 
-  return ((info & RINFO_SIZE) - 3);
+  return ((info & RINFO_SIZE) - 3U);
 }
 
 
@@ -624,6 +645,8 @@ static uint32_t GetRxFrameSize (void) {
   \return      \ref execution_status
 */
 static int32_t GetRxFrameTime (ARM_ETH_MAC_TIME *time) {
+  (void)time;
+
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
 
@@ -634,6 +657,8 @@ static int32_t GetRxFrameTime (ARM_ETH_MAC_TIME *time) {
   \return      \ref execution_status
 */
 static int32_t GetTxFrameTime (ARM_ETH_MAC_TIME *time) {
+  (void)time;
+
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
 
@@ -676,8 +701,8 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       switch (arg & ARM_ETH_MAC_DUPLEX_Msk) {
         case ARM_ETH_MAC_DUPLEX_FULL:
           mac2    |= MAC2_FULL_DUP;
-          command |= CR_FULL_DUP;        
-          igpt    |= IPGT_FULL_DUP;        
+          command |= CR_FULL_DUP;
+          igpt    |= IPGT_FULL_DUP;
           break;
       }
 
@@ -720,7 +745,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       /* Enable/disable MAC transmitter */
       command = LPC_EMAC->Command & ~CR_TX_EN;
 
-      if (arg != 0) {
+      if (arg != 0U) {
         command |= CR_TX_EN;
       }
       LPC_EMAC->Command = command;
@@ -730,7 +755,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       /* Enable/disable MAC receiver */
       command = LPC_EMAC->Command & ~CR_RX_EN;
       mac1    = LPC_EMAC->MAC1    & ~MAC1_REC_EN;
-      if (arg != 0) {
+      if (arg != 0U) {
         command |= CR_RX_EN;
         mac1    |= MAC1_REC_EN;
       }
@@ -767,11 +792,13 @@ static int32_t Control (uint32_t control, uint32_t arg) {
 /**
   \fn          int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time)
   \brief       Control Precision Timer.
-  \param[in]   control  operation
+  \param[in]   control  Operation
   \param[in]   time     Pointer to time structure
   \return      \ref execution_status
 */
 static int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time) {
+  (void)time;
+  (void)control;
 
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
@@ -795,21 +822,28 @@ static int32_t PHY_Read (uint8_t phy_addr, uint8_t reg_addr, uint16_t *data) {
     return ARM_DRIVER_ERROR;
   }
 
-  LPC_EMAC->MADR = (phy_addr << 8) | reg_addr;
+  LPC_EMAC->MADR = (uint32_t)((phy_addr << 8) | reg_addr);
   LPC_EMAC->MCMD = MCMD_READ;
 
   /* Wait until operation completed */
+#if   defined(RTE_CMSIS_RTOS2)
+  tick = osKernelGetSysTimerCount();
+#elif defined(RTE_CMSIS_RTOS)
   tick = osKernelSysTick();
+#endif
   do {
-    if ((LPC_EMAC->MIND & MIND_BUSY) == 0) break;
+    if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) break;
+#if   defined(RTE_CMSIS_RTOS2)
+  } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
+#elif defined(RTE_CMSIS_RTOS)
   } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
+#endif
 
-  if ((LPC_EMAC->MIND & MIND_BUSY) == 0) {
-    LPC_EMAC->MCMD = 0;
-    *data = LPC_EMAC->MRDD;
+  if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) {
+    LPC_EMAC->MCMD = 0U;
+    *data = (uint16_t)LPC_EMAC->MRDD;
     return ARM_DRIVER_OK;
   }
-
   return ARM_DRIVER_ERROR_TIMEOUT;
 }
 
@@ -828,16 +862,30 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
     return ARM_DRIVER_ERROR;
   }
 
-  LPC_EMAC->MADR = (phy_addr << 8) | reg_addr;
+  if (reg_addr == 0U) {
+    /* Prevent Power down of the PHY to avoid
+       PHY from stopping to generate needed clocks  */
+    data &= ~0x0800U;
+  }
+
+  LPC_EMAC->MADR = (uint32_t)((phy_addr << 8) | reg_addr);
   LPC_EMAC->MWTD = data;
 
   /* Wait until operation completed */
+#if   defined(RTE_CMSIS_RTOS2)
+  tick = osKernelGetSysTimerCount();
+#elif defined(RTE_CMSIS_RTOS)
   tick = osKernelSysTick();
+#endif
   do {
-    if ((LPC_EMAC->MIND & MIND_BUSY) == 0) break;
+    if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) break;
+#if   defined(RTE_CMSIS_RTOS2)
+  } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
+#elif defined(RTE_CMSIS_RTOS)
   } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
-  
-  if ((LPC_EMAC->MIND & MIND_BUSY) == 0) {
+#endif
+
+  if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) {
     return ARM_DRIVER_OK;
   }
 
@@ -848,7 +896,7 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
 /* Ethernet IRQ Handler */
 void ENET_IRQHandler (void) {
   uint32_t int_stat;
-  uint32_t event = 0;
+  uint32_t event = 0U;
 
   int_stat = (LPC_EMAC->IntStatus & LPC_EMAC->IntEnable);
   LPC_EMAC->IntClear = int_stat;

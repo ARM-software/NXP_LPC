@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ *
+ * $Date:        15. Januar 2020
+ * $Revision:    V1.2
  *
  * Project:      MCI Driver Definitions for NXP LPC40xx
  * -------------------------------------------------------------------------- */
@@ -24,17 +26,16 @@
 #ifndef __MCI_LPC40XX_H
 #define __MCI_LPC40XX_H
 
+#include <string.h>
+
+#include "Driver_MCI.h"
+
 #include "LPC407x_8x_177x_8x.h"
 #include "PIN_LPC40xx.h"
 #include "GPIO_LPC40xx.h"
 #include "GPDMA_LPC40xx.h"
 
-#include "Driver_MCI.h"
-
-#include "RTE_Components.h"
 #include "RTE_Device.h"
-
-#include <string.h>
 
 
 #if (defined(RTE_Drivers_MCI0) && (RTE_SD == 0))
@@ -234,6 +235,7 @@ typedef struct _MCI_INFO {
   uint32_t             *response;       /* Pointer to response buffer         */
   MCI_XFER              xfer;           /* Data transfer description          */
   uint8_t volatile      flags;          /* Driver state flags                 */
+  uint8_t               reserved[3];    /* Reserved                           */
   uint32_t              dctrl;          /* Data control register value        */
   uint32_t              dlen;           /* Data length register value         */
 } MCI_INFO;

@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.1
+ * $Date:        20. December 2019
+ * $Revision:    V1.3
  *
  * Project:      I2S Driver Definitions for NXP LPC18xx
  * -------------------------------------------------------------------------- */
@@ -28,12 +29,16 @@
 #include "Driver_SAI.h"
 
 #include "SCU_LPC18xx.h"
+#include "GPIO_LPC18xx.h"
 #include "GPDMA_LPC18xx.h"
 
+#include "RTE_Device.h"
+#include "RTE_Components.h"
+
 // Clock Control Unit register
-#define CCU_CLK_CFG_RUN     (1 << 0)
-#define CCU_CLK_CFG_AUTO    (1 << 1)
-#define CCU_CLK_STAT_RUN    (1 << 0)
+#define CCU_CLK_CFG_RUN     (1U << 0)
+#define CCU_CLK_CFG_AUTO    (1U << 1)
+#define CCU_CLK_STAT_RUN    (1U << 0)
 
 // I2S Register interface definitions
 // I2S Digital audio output/input register
@@ -100,62 +105,70 @@
 #define I2S_FLAG_CONFIGURED             (1U << 2)
 
 // I2S Stream Information (Run-Time)
-typedef struct _I2S_STREAM_INFO {
+typedef struct {
   uint32_t                num;           // Total number of data to be transmited/received
   uint8_t                *buf;           // Pointer to data buffer
   uint32_t                cnt;           // Number of data transmited/receive
   uint8_t                 data_bits;     // Number of data bits
   uint8_t                 master;        // Master flag
   uint8_t                 residue_num;
-  uint8_t                 residue_buf[4];
   uint8_t                 residue_cnt;
+  uint8_t                 residue_buf[4];
 } I2S_STREAM_INFO;
 
-typedef struct _I2S_STATUS {
+typedef struct {
   uint8_t tx_busy;                       // Transmitter busy flag
   uint8_t rx_busy;                       // Receiver busy flag
   uint8_t tx_underflow;                  // Transmit data underflow detected (cleared on start of next send operation)
   uint8_t rx_overflow;                   // Receive data overflow detected (cleared on start of next receive operation)
   uint8_t frame_error;                   // Sync Frame error detected (cleared on start of next send/receive operation)
+  uint8_t reserved[3];
 } I2S_STATUS;
 
 // I2S Information (Run-Time)
-typedef struct _I2S_INFO {
+typedef struct {
   ARM_SAI_SignalEvent_t   cb_event;      // Event callback
   I2S_STATUS              status;        // Status flags
   I2S_STREAM_INFO         tx;            // Transmit information
   I2S_STREAM_INFO         rx;            // Receive information
   uint8_t                 flags;         // I2S driver flags
+  uint8_t                 reserved[3];
 } I2S_INFO;
 
 // I2S DMA
-typedef const struct _I2S_DMA {
+typedef const struct {
+  GPDMA_SignalEvent_t     cb_event;      // DMA Event callback
   uint8_t                 channel;       // DMA Channel
   uint8_t                 peripheral;    // DMA mux
   uint8_t                 peripheral_sel;// DMA mux selection
-  GPDMA_SignalEvent_t     cb_event;      // DMA Event callback
+  uint8_t                 reserved;
 } I2S_DMA;
 
 // I2S Pin Configuration
-typedef const struct _I2S_PINS {
-  PIN_ID                 *sck;           // Clock pin identifier
-  PIN_ID                 *ws;            // Word select pin identifier
-  PIN_ID                 *sda;           // Data pin identifier
-  PIN_ID                 *mclk;          // Master clock pin identifier
+typedef const struct {
+  const PIN_ID           *sck;           // Clock pin identifier
+  const PIN_ID           *ws;            // Word select pin identifier
+  const PIN_ID           *sda;           // Data pin identifier
+  const PIN_ID           *mclk;          // Master clock pin identifier
 } I2S_PINS;
 
 // I2S Reseurces definitions
-typedef struct {
+typedef const struct {
   ARM_SAI_CAPABILITIES    capabilities;  // Capabilities
   LPC_I2Sn_Type          *reg;           // Pointer to I2S peripheral
   I2S_PINS                rx_pins;       // I2S receive pins configuration
   I2S_PINS                tx_pins;       // I2S transmit pins configuration
-  IRQn_Type               irq_num;       // I2S IRQ Number
+  int32_t                 irq_num;       // I2S IRQ Number
   I2S_DMA                *dma_tx;        // I2S TX DMA configuration
   I2S_DMA                *dma_rx;        // I2S RX DMA configuration
   uint8_t                 tx_fifo_level; // I2S transmit fifo level
   uint8_t                 rx_fifo_level; // I2S receive fifo level
+  uint8_t                 reserved[2];
   I2S_INFO               *info;          // Run-Time information
-} const I2S_RESOURCES;
+} I2S_RESOURCES;
+
+/* Global functions and variables exported by driver .c module */
+extern ARM_DRIVER_SAI Driver_SAI0;
+extern ARM_DRIVER_SAI Driver_SAI1;
 
 #endif // __I2S_LPC18XX_H

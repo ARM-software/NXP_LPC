@@ -1,5 +1,6 @@
-/* -------------------------------------------------------------------------- /*
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.4
+ * $Date:        04. April 2019
+ * $Revision:    V2.5
  *
  * Driver:       Driver_USBH1_HCI
  * Configured:   via RTE_Device.h configuration file
@@ -32,6 +33,9 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.5
+ *    Removed Arm Compiler warnings
+ *    Added timeout to wait loops
  *  Version 2.4
  *    Corrected PowerControl function for conditional Power full (driver must be initialized)
  *  Version 2.3
@@ -49,14 +53,7 @@
  */
 
 
-#include "Driver_USBH.h"
-
-#include "LPC18xx.h"
-#include "SCU_LPC18xx.h"
 #include "USB_LPC18xx.h"
-
-#include "RTE_Device.h"
-#include "RTE_Components.h"
 
 #if      (RTE_USB_USB1 == 0)
 #error   "USB1 is not enabled in the RTE_Device.h!"
@@ -65,8 +62,8 @@
 #error   "Both full-speed and high-speed PHY can not be selected at the same time!"
 #endif
 
-extern uint8_t USB1_role;
-extern uint8_t USB1_state;
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT               (SystemCoreClock / 64U)
 
 extern void USB1_PinsConfigure   (void);
 extern void USB1_PinsUnconfigure (void);
@@ -74,14 +71,20 @@ extern void USB1_PinsUnconfigure (void);
 
 // USBH EHCI Driver ************************************************************
 
-#define ARM_USBH_EHCI_DRIVER_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,4)
+#define ARM_USBH_EHCI_DRIVER_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,5)
 
 // Driver Version
 static const ARM_DRIVER_VERSION usbh_ehci_driver_version = { ARM_USBH_API_VERSION, ARM_USBH_EHCI_DRIVER_VERSION };
 
+// Function prototypes
+void USBH1_IRQ (void);
+
 // Driver Capabilities
 static const ARM_USBH_HCI_CAPABILITIES usbh_ehci_driver_capabilities = {
   0x0001U       // Root HUB available Ports Mask
+#if (defined(ARM_USBH_API_VERSION) && (ARM_USBH_API_VERSION >= 0x202U))
+, 0U            // Reserved
+#endif
 };
 
 static ARM_USBH_HCI_Interrupt_t EHCI_IRQ;
@@ -114,11 +117,11 @@ static int32_t USBH_HCI_Initialize (ARM_USBH_HCI_Interrupt_t cb_interrupt) {
 
   EHCI_IRQ = cb_interrupt;
 
-  USB1_role   =  ARM_USB_ROLE_HOST;
+  USB1_role = ARM_USB_ROLE_HOST;
 
   USB1_PinsConfigure ();
 
-  USB1_state  =  USBH_DRIVER_INITIALIZED;
+  USB1_state = USBH_DRIVER_INITIALIZED;
 
   return ARM_DRIVER_OK;
 }
@@ -144,6 +147,13 @@ static int32_t USBH_HCI_Uninitialize (void) {
   \return      \ref execution_status
 */
 static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
+  uint32_t tout_cnt;
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
@@ -155,13 +165,28 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
 #endif
     
       if ((LPC_CGU->BASE_USB1_CLK & 1U) == 0U) {
-        LPC_CCU1->CLK_USB1_CFG    &= ~1U;               // Disable USB1 Base Clock
-        while (LPC_CCU1->CLK_USB1_STAT    & 1U);
+        LPC_CCU1->CLK_USB1_CFG &= ~1U;                  // Disable USB1 Base Clock
+        tout_cnt = LOOP_MAX_CNT;
+        while (LPC_CCU1->CLK_USB1_STAT & 1U) {
+          if (tout_cnt-- == 0U) {
+            __NOP();
+            break;
+          }
+        }
         LPC_CCU1->CLK_M3_USB1_CFG &= ~1U;               // Disable USB1 Register Interface Clock
-        while (LPC_CCU1->CLK_M3_USB1_STAT & 1U);
-        LPC_CGU->BASE_USB1_CLK     =  1U;               // Disable Base Clock
+        tout_cnt = LOOP_MAX_CNT;
+        while (LPC_CCU1->CLK_M3_USB1_STAT & 1U){
+          if (tout_cnt-- == 0U) {
+            __NOP();
+            break;
+          }
+        }
+        LPC_CGU->BASE_USB1_CLK = 1U;                    // Disable Base Clock
       }
       break;
+
+    case ARM_POWER_LOW:
+      return ARM_DRIVER_ERROR_UNSUPPORTED;
 
     case ARM_POWER_FULL:
       if ((USB1_state & USBH_DRIVER_INITIALIZED) == 0U) { return ARM_DRIVER_ERROR; }
@@ -170,9 +195,21 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
       LPC_CGU->BASE_USB1_CLK     = (0x01U << 11) |      // Auto-block Enable
                                    (0x0CU << 24) ;      // Clock source: IDIVA
       LPC_CCU1->CLK_M3_USB1_CFG |=  1U;                 // Enable USB1 Register Interface Clock
-      while (!(LPC_CCU1->CLK_M3_USB1_STAT & 1U));
-      LPC_CCU1->CLK_USB1_CFG    |=  1U;                 // Enable USB1 Base Clock
-      while (!(LPC_CCU1->CLK_USB1_STAT    & 1U));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_CCU1->CLK_M3_USB1_STAT & 1U)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
+      LPC_CCU1->CLK_USB1_CFG |= 1U;                     // Enable USB1 Base Clock
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_CCU1->CLK_USB1_STAT & 1U)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Clear Transceiver Selection
       LPC_USB1->PORTSC1_H &= ~(USB_PORTSC1_H_PTS_MSK | USB_PORTSC1_H_PFSC | USB_PORTSC1_H_PHCD);
@@ -188,12 +225,8 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
                              SCU_USB1_PIN_CFG_EPWR);
 #endif
 
-      USB1_state |=  USBH_DRIVER_POWERED;               // Set powered flag
-      NVIC_EnableIRQ   (USB1_IRQn);                     // Enable interrupt
-      break;
-
-    default:
-      return ARM_DRIVER_ERROR_UNSUPPORTED;
+      USB1_state |= USBH_DRIVER_POWERED;                // Set powered flag
+      NVIC_EnableIRQ (USB1_IRQn);                       // Enable interrupt
   }
 
   return ARM_DRIVER_OK;
@@ -210,6 +243,8 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
 */
 static int32_t USBH_HCI_PortVbusOnOff (uint8_t port, bool power) {
   // No GPIO pins used for VBUS control it is controlled by EHCI Controller
+
+  (void)power;
 
   if (((1U << port) & usbh_ehci_driver_capabilities.port_mask) == 0U) { return ARM_DRIVER_ERROR; }
   return ARM_DRIVER_OK;

@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.1
+ * $Date:        11. April 2019
+ * $Revision:    V1.2
  *
  * Project:      SCU Driver for NXP LPC18xx
  * -------------------------------------------------------------------------- */
@@ -147,12 +148,12 @@ int32_t SCU_PinInterruptSourceSelect (uint8_t pin_int, uint8_t port, uint8_t pin
   if ((port > 7) || (pin > 31) || (pin_int > 7)) return -1;
 
   if (pin_int < 4) {
-    LPC_SCU->PINTSEL0 &= ~(0xFF << (8 * pin_int));
-    LPC_SCU->PINTSEL0 |=  ((pin | (port << 5)) << (8 * pin_int));
+    LPC_SCU->PINTSEL0 &= ~(0xFFUL << (8 * pin_int));
+    LPC_SCU->PINTSEL0 |=  ((uint32_t)(pin | (port << 5)) << (8 * pin_int));
   } else {
     pin_int -= 4;
-    LPC_SCU->PINTSEL1 &= ~(0xFF << (8 * pin_int));
-    LPC_SCU->PINTSEL1 |=  ((pin | (port << 5)) << (8 * pin_int));
+    LPC_SCU->PINTSEL1 &= ~(0xFFUL << (8 * pin_int));
+    LPC_SCU->PINTSEL1 |=  ((uint32_t)(pin | (port << 5)) << (8 * pin_int));
   }
 
   return 0;

@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.4
+ * $Date:        20. December 2019
+ * $Revision:    V1.6
  *
  * Driver:       Driver_SAI0, Driver_SAI1
  * Configured:   via RTE_Device.h configuration file
@@ -32,6 +33,13 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.6
+ *    - Updated PIN_ID structure alignment
+ *    - Removed minor compiler warnings
+ *  Version 1.5
+ *    - Added support for ARM Compiler 6
+ *    - Added timeout to wait loops 
+ *    - Made Pin configuration const 
  *  Version 1.4
  *    - Driver update to work with GPDMA_LPC18xx ver.: 1.3
  *  Version 1.3
@@ -44,11 +52,8 @@
  *  Version 1.0
  *    - Initial release
  */
-#include "GPIO_LPC18xx.h"
-#include "I2S_LPC18xx.h"
 
-#include "RTE_Device.h"
-#include "RTE_Components.h"
+#include "I2S_LPC18xx.h"
 
 #include <math.h>
 
@@ -105,8 +110,14 @@
 #endif
 #endif
 
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT    (SystemCoreClock / 64U)
 
-#define ARM_SAI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,4)   // driver version
+// Interrupt Handler Prototypes
+void I2S0_IRQHandler (void);
+void I2S1_IRQHandler (void);
+
+#define ARM_SAI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,6)   // driver version
 // Driver Version
 static const ARM_DRIVER_VERSION DriverVersion = {
   ARM_SAI_API_VERSION,
@@ -118,62 +129,67 @@ static const ARM_DRIVER_VERSION DriverVersion = {
 static I2S_INFO I2S0_Info = {0};
 
 #if (RTE_I2S0_RX_SCK_PIN_EN == 1U)
-static PIN_ID I2S0_pin_rx_sck  = { RTE_I2S0_RX_SCK_PORT,  RTE_I2S0_RX_SCK_BIT,  RTE_I2S0_RX_SCK_FUNC };
+static const PIN_ID I2S0_pin_rx_sck  = { RTE_I2S0_RX_SCK_PORT,  RTE_I2S0_RX_SCK_BIT,  {0U, 0U}, RTE_I2S0_RX_SCK_FUNC };
 #endif
 #if (RTE_I2S0_RX_WS_PIN_EN  == 1U)
-static PIN_ID I2S0_pin_rx_ws   = { RTE_I2S0_RX_WS_PORT,   RTE_I2S0_RX_WS_BIT,   RTE_I2S0_RX_WS_FUNC };
+static const PIN_ID I2S0_pin_rx_ws   = { RTE_I2S0_RX_WS_PORT,   RTE_I2S0_RX_WS_BIT,   {0U, 0U}, RTE_I2S0_RX_WS_FUNC };
 #endif
 #if (RTE_I2S0_RX_SDA_PIN_EN == 1U)
-static PIN_ID I2S0_pin_rx_sda  = { RTE_I2S0_RX_SDA_PORT,  RTE_I2S0_RX_SDA_BIT,  RTE_I2S0_RX_SDA_FUNC };
+static const PIN_ID I2S0_pin_rx_sda  = { RTE_I2S0_RX_SDA_PORT,  RTE_I2S0_RX_SDA_BIT,  {0U, 0U}, RTE_I2S0_RX_SDA_FUNC };
 #endif
 #if (RTE_I2S0_RX_MCLK_PIN_EN == 1U)
-static PIN_ID I2S0_pin_rx_mclk = { RTE_I2S0_RX_MCLK_PORT, RTE_I2S0_RX_MCLK_BIT, RTE_I2S0_RX_MCLK_FUNC };
+static const PIN_ID I2S0_pin_rx_mclk = { RTE_I2S0_RX_MCLK_PORT, RTE_I2S0_RX_MCLK_BIT, {0U, 0U}, RTE_I2S0_RX_MCLK_FUNC };
 #endif
 #if (RTE_I2S0_TX_SCK_PIN_EN  == 1U)
-static PIN_ID I2S0_pin_tx_sck  = { RTE_I2S0_TX_SCK_PORT,  RTE_I2S0_TX_SCK_BIT,  RTE_I2S0_TX_SCK_FUNC };
+static const PIN_ID I2S0_pin_tx_sck  = { RTE_I2S0_TX_SCK_PORT,  RTE_I2S0_TX_SCK_BIT,  {0U, 0U}, RTE_I2S0_TX_SCK_FUNC };
 #endif
 #if (RTE_I2S0_TX_WS_PIN_EN   == 1U)
-static PIN_ID I2S0_pin_tx_ws   = { RTE_I2S0_TX_WS_PORT,   RTE_I2S0_TX_WS_BIT,   RTE_I2S0_TX_WS_FUNC };
+static const PIN_ID I2S0_pin_tx_ws   = { RTE_I2S0_TX_WS_PORT,   RTE_I2S0_TX_WS_BIT,   {0U, 0U}, RTE_I2S0_TX_WS_FUNC };
 #endif
 #if (RTE_I2S0_TX_SDA_PIN_EN  == 1U)
-static PIN_ID I2S0_pin_tx_sda  = { RTE_I2S0_TX_SDA_PORT,  RTE_I2S0_TX_SDA_BIT,  RTE_I2S0_TX_SDA_FUNC };
+static const PIN_ID I2S0_pin_tx_sda  = { RTE_I2S0_TX_SDA_PORT,  RTE_I2S0_TX_SDA_BIT,  {0U, 0U}, RTE_I2S0_TX_SDA_FUNC };
 #endif
 #if (RTE_I2S0_TX_MCLK_PIN_EN == 1U)
-static PIN_ID I2S0_pin_tx_mclk = { RTE_I2S0_TX_MCLK_PORT, RTE_I2S0_TX_MCLK_BIT, RTE_I2S0_TX_MCLK_FUNC };
+static const PIN_ID I2S0_pin_tx_mclk = { RTE_I2S0_TX_MCLK_PORT, RTE_I2S0_TX_MCLK_BIT, {0U, 0U}, RTE_I2S0_TX_MCLK_FUNC };
 #endif
 
 #if (RTE_I2S0_DMA_TX_EN == 1U)
 void I2S0_GPDMA_Tx_Event (uint32_t event);
-static I2S_DMA I2S0_DMA_Tx = {RTE_I2S0_DMA_TX_CH,
+static I2S_DMA I2S0_DMA_Tx = {I2S0_GPDMA_Tx_Event,
+                              RTE_I2S0_DMA_TX_CH,
                               RTE_I2S0_DMA_TX_PERI,
                               RTE_I2S0_DMA_TX_PERI_SEL,
-                              I2S0_GPDMA_Tx_Event};
+                              0U};
 #endif
 #if (RTE_I2S0_DMA_RX_EN == 1U)
 void I2S0_GPDMA_Rx_Event (uint32_t event);
-static I2S_DMA I2S0_DMA_Rx = {RTE_I2S0_DMA_RX_CH,
+static I2S_DMA I2S0_DMA_Rx = {I2S0_GPDMA_Rx_Event,
+                              RTE_I2S0_DMA_RX_CH,
                               RTE_I2S0_DMA_RX_PERI,
                               RTE_I2S0_DMA_RX_PERI_SEL,
-                              I2S0_GPDMA_Rx_Event};
+                              0U};
 #endif
 
-static const I2S_RESOURCES I2S0_Resources = {
+static I2S_RESOURCES I2S0_Resources = {
   {  // Capabilities
-    1,   ///< supports asynchronous Transmit/Receive
-    1,   ///< supports synchronous Transmit/Receive
-    0,   ///< supports user defined Protocol
-    1,   ///< supports I2S Protocol
-    0,   ///< supports MSB/LSB justified Protocol
-    0,   ///< supports PCM short/long frame Protocol
-    0,   ///< supports AC'97 Protocol
-    1,   ///< supports Mono mode
-    0,   ///< supports Companding
+    1U,  ///< supports asynchronous Transmit/Receive
+    1U,  ///< supports synchronous Transmit/Receive
+    0U,  ///< supports user defined Protocol
+    1U,  ///< supports I2S Protocol
+    0U,  ///< supports MSB/LSB justified Protocol
+    0U,  ///< supports PCM short/long frame Protocol
+    0U,  ///< supports AC'97 Protocol
+    1U,  ///< supports Mono mode
+    0U,  ///< supports Companding
 #if ((RTE_I2S0_TX_MCLK_PIN_EN == 1U) && (RTE_I2S0_RX_MCLK_PIN_EN == 1U))
-    1,   ///< supports MCLK (Master Clock) pin
+    1U,  ///< supports MCLK (Master Clock) pin
 #else
-    0,   ///< supports MCLK (Master Clock) pin
+    0U,  ///< supports MCLK (Master Clock) pin
 #endif
-    0,   ///< supports Frame error event: \ref ARM_SAI_EVENT_FRAME_ERROR
+    0U   ///< supports Frame error event: \ref ARM_SAI_EVENT_FRAME_ERROR
+#if (defined(ARM_SAI_API_VERSION) && (ARM_SAI_API_VERSION >= 0x101U))
+  , 0U   ///< reserved bits
+#endif
   },
   LPC_I2S0,
   {  // I2S0 RX Pin configuration
@@ -233,7 +249,7 @@ static const I2S_RESOURCES I2S0_Resources = {
 #endif
   (uint8_t) I2S0_TX_FIFO_LEVEL,
   (uint8_t) I2S0_RX_FIFO_LEVEL,
-
+  {0U, 0U,},
   &I2S0_Info
 };
 #endif
@@ -243,62 +259,67 @@ static const I2S_RESOURCES I2S0_Resources = {
 static I2S_INFO I2S1_Info = {0};
 
 #if (RTE_I2S1_RX_SCK_PIN_EN == 1U)
-static PIN_ID I2S1_pin_rx_sck  = { RTE_I2S1_RX_SCK_PORT,  RTE_I2S1_RX_SCK_BIT,  RTE_I2S1_RX_SCK_FUNC };
+static const PIN_ID I2S1_pin_rx_sck  = { RTE_I2S1_RX_SCK_PORT,  RTE_I2S1_RX_SCK_BIT,  {0U, 0U}, RTE_I2S1_RX_SCK_FUNC };
 #endif
 #if (RTE_I2S1_RX_WS_PIN_EN  == 1U)
-static PIN_ID I2S1_pin_rx_ws   = { RTE_I2S1_RX_WS_PORT,   RTE_I2S1_RX_WS_BIT,   RTE_I2S1_RX_WS_FUNC };
+static const PIN_ID I2S1_pin_rx_ws   = { RTE_I2S1_RX_WS_PORT,   RTE_I2S1_RX_WS_BIT,   {0U, 0U}, RTE_I2S1_RX_WS_FUNC };
 #endif
 #if (RTE_I2S1_RX_SDA_PIN_EN == 1U)
-static PIN_ID I2S1_pin_rx_sda  = { RTE_I2S1_RX_SDA_PORT,  RTE_I2S1_RX_SDA_BIT,  RTE_I2S1_RX_SDA_FUNC };
+static const PIN_ID I2S1_pin_rx_sda  = { RTE_I2S1_RX_SDA_PORT,  RTE_I2S1_RX_SDA_BIT,  {0U, 0U}, RTE_I2S1_RX_SDA_FUNC };
 #endif
 #if (RTE_I2S1_RX_MCLK_PIN_EN == 1U)
-static PIN_ID I2S1_pin_rx_mclk = { RTE_I2S1_RX_MCLK_PORT, RTE_I2S1_RX_MCLK_BIT, RTE_I2S1_RX_MCLK_FUNC };
+static const PIN_ID I2S1_pin_rx_mclk = { RTE_I2S1_RX_MCLK_PORT, RTE_I2S1_RX_MCLK_BIT, {0U, 0U}, RTE_I2S1_RX_MCLK_FUNC };
 #endif
 #if (RTE_I2S1_TX_SCK_PIN_EN  == 1U)
-static PIN_ID I2S1_pin_tx_sck  = { RTE_I2S1_TX_SCK_PORT,  RTE_I2S1_TX_SCK_BIT,  RTE_I2S1_TX_SCK_FUNC };
+static const PIN_ID I2S1_pin_tx_sck  = { RTE_I2S1_TX_SCK_PORT,  RTE_I2S1_TX_SCK_BIT,  {0U, 0U}, RTE_I2S1_TX_SCK_FUNC };
 #endif
 #if (RTE_I2S1_TX_WS_PIN_EN   == 1U)
-static PIN_ID I2S1_pin_tx_ws   = { RTE_I2S1_TX_WS_PORT,   RTE_I2S1_TX_WS_BIT,   RTE_I2S1_TX_WS_FUNC };
+static const PIN_ID I2S1_pin_tx_ws   = { RTE_I2S1_TX_WS_PORT,   RTE_I2S1_TX_WS_BIT,   {0U, 0U}, RTE_I2S1_TX_WS_FUNC };
 #endif
 #if (RTE_I2S1_TX_SDA_PIN_EN  == 1U)
-static PIN_ID I2S1_pin_tx_sda  = { RTE_I2S1_TX_SDA_PORT,  RTE_I2S1_TX_SDA_BIT,  RTE_I2S1_TX_SDA_FUNC };
+static const PIN_ID I2S1_pin_tx_sda  = { RTE_I2S1_TX_SDA_PORT,  RTE_I2S1_TX_SDA_BIT,  {0U, 0U}, RTE_I2S1_TX_SDA_FUNC };
 #endif
 #if (RTE_I2S1_TX_MCLK_PIN_EN == 1U)
-static PIN_ID I2S1_pin_tx_mclk = { RTE_I2S1_TX_MCLK_PORT, RTE_I2S1_TX_MCLK_BIT, RTE_I2S1_TX_MCLK_FUNC };
+static const PIN_ID I2S1_pin_tx_mclk = { RTE_I2S1_TX_MCLK_PORT, RTE_I2S1_TX_MCLK_BIT, {0U, 0U}, RTE_I2S1_TX_MCLK_FUNC };
 #endif
 
 #if (RTE_I2S1_DMA_TX_EN == 1U)
 void I2S1_GPDMA_Tx_Event (uint32_t event);
-static I2S_DMA I2S1_DMA_Tx = {RTE_I2S1_DMA_TX_CH,
+static I2S_DMA I2S1_DMA_Tx = {I2S1_GPDMA_Tx_Event,
+                              RTE_I2S1_DMA_TX_CH,
                               RTE_I2S1_DMA_TX_PERI,
                               RTE_I2S1_DMA_TX_PERI_SEL,
-                              I2S1_GPDMA_Tx_Event};
+                              0U};
 #endif
 #if (RTE_I2S1_DMA_RX_EN == 1U)
 void I2S1_GPDMA_Rx_Event (uint32_t event);
-static I2S_DMA I2S1_DMA_Rx = {RTE_I2S1_DMA_RX_CH,
+static I2S_DMA I2S1_DMA_Rx = {I2S1_GPDMA_Rx_Event,
+                              RTE_I2S1_DMA_RX_CH,
                               RTE_I2S1_DMA_RX_PERI,
                               RTE_I2S1_DMA_RX_PERI_SEL,
-                              I2S1_GPDMA_Rx_Event};
+                              0U};
 #endif
 
-static const I2S_RESOURCES I2S1_Resources = {
+static I2S_RESOURCES I2S1_Resources = {
   {  // Capabilities
-    1,   ///< supports asynchronous Transmit/Receive
-    1,   ///< supports synchronous Transmit/Receive
-    0,   ///< supports user defined Protocol
-    1,   ///< supports I2S Protocol
-    0,   ///< supports MSB/LSB justified Protocol
-    0,   ///< supports PCM short/long frame Protocol
-    0,   ///< supports AC'97 Protocol
-    1,   ///< supports Mono mode
-    0,   ///< supports Companding
+    1U,  ///< supports asynchronous Transmit/Receive
+    1U,  ///< supports synchronous Transmit/Receive
+    0U,  ///< supports user defined Protocol
+    1U,  ///< supports I2S Protocol
+    0U,  ///< supports MSB/LSB justified Protocol
+    0U,  ///< supports PCM short/long frame Protocol
+    0U,  ///< supports AC'97 Protocol
+    1U,  ///< supports Mono mode
+    0U,  ///< supports Companding
 #if ((RTE_I2S1_TX_MCLK_PIN_EN == 1U) && (RTE_I2S1_RX_MCLK_PIN_EN == 1U))
-    1,   ///< supports MCLK (Master Clock) pin
+    1U,  ///< supports MCLK (Master Clock) pin
 #else
-    0,   ///< supports MCLK (Master Clock) pin
+    0U,  ///< supports MCLK (Master Clock) pin
 #endif
-    0,   ///< supports Frame error event: \ref ARM_SAI_EVENT_FRAME_ERROR
+    0U   ///< supports Frame error event: \ref ARM_SAI_EVENT_FRAME_ERROR
+#if (defined(ARM_SAI_API_VERSION) && (ARM_SAI_API_VERSION >= 0x101U))
+  , 0U   ///< reserved bits
+#endif
   },
   LPC_I2S1,
   {  // I2S1 RX Pin configuration
@@ -358,7 +379,7 @@ static const I2S_RESOURCES I2S1_Resources = {
 #endif
   (uint8_t) I2S1_TX_FIFO_LEVEL,
   (uint8_t) I2S1_RX_FIFO_LEVEL,
-
+  {0U, 0U,},
   &I2S1_Info
 };
 #endif
@@ -386,7 +407,7 @@ static void i2s_dec2fract (double dec, uint8_t* xret, uint8_t* yret) {
 
   //Expand float input
   while (dec != floor(dec)) { n <<= 1; dec *= 2; }
-  idec = dec;
+  idec = (int_fast64_t)dec;
 
   //continue fraction
   for (i = 0; i < 64; i++) {
@@ -409,8 +430,8 @@ static void i2s_dec2fract (double dec, uint8_t* xret, uint8_t* yret) {
     g[0] = g[1]; 
     g[1] = g[2];
   }
-  *yret = g[1];
-  *xret = f[1];
+  *yret = g[1] & 0xFFU;
+  *xret = f[1] & 0xFFU;
 }
 
 /**
@@ -587,9 +608,9 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->rx_pins.sck != NULL) {
     if (i2s->rx_pins.sck->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->rx_pins.sck->num, 0);
+      SCU_CLK_PinConfigure (i2s->rx_pins.sck->num, 0U);
     } else {
-      SCU_PinConfigure(i2s->rx_pins.sck->port, i2s->rx_pins.sck->num, 0);
+      SCU_PinConfigure(i2s->rx_pins.sck->port, i2s->rx_pins.sck->num, 0U);
     }
   }
 
@@ -597,10 +618,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->rx_pins.ws != NULL) {
     if (i2s->rx_pins.ws->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->rx_pins.ws->num, 0);
+      SCU_CLK_PinConfigure (i2s->rx_pins.ws->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->rx_pins.ws->port, i2s->rx_pins.ws->num, 0);
+      SCU_PinConfigure(i2s->rx_pins.ws->port, i2s->rx_pins.ws->num, 0U);
     }
   }
 
@@ -608,10 +629,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->rx_pins.sda != NULL) {
     if (i2s->rx_pins.sda->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->rx_pins.sda->num, 0);
+      SCU_CLK_PinConfigure (i2s->rx_pins.sda->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->rx_pins.sda->port, i2s->rx_pins.sda->num, 0);
+      SCU_PinConfigure(i2s->rx_pins.sda->port, i2s->rx_pins.sda->num, 0U);
     }
   }
 
@@ -619,10 +640,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->rx_pins.mclk != NULL) {
     if (i2s->rx_pins.mclk->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->rx_pins.mclk->num, 0);
+      SCU_CLK_PinConfigure (i2s->rx_pins.mclk->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->rx_pins.mclk->port, i2s->rx_pins.mclk->num, 0);
+      SCU_PinConfigure(i2s->rx_pins.mclk->port, i2s->rx_pins.mclk->num, 0U);
     }
   }
 
@@ -630,10 +651,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->tx_pins.sck != NULL) {
     if (i2s->tx_pins.sck->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->tx_pins.sck->num, 0);
+      SCU_CLK_PinConfigure (i2s->tx_pins.sck->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->tx_pins.sck->port, i2s->tx_pins.sck->num, 0);
+      SCU_PinConfigure(i2s->tx_pins.sck->port, i2s->tx_pins.sck->num, 0U);
     }
   }
 
@@ -641,10 +662,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->tx_pins.ws != NULL) {
     if (i2s->tx_pins.ws->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->tx_pins.ws->num, 0);
+      SCU_CLK_PinConfigure (i2s->tx_pins.ws->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->tx_pins.ws->port, i2s->tx_pins.ws->num, 0);
+      SCU_PinConfigure(i2s->tx_pins.ws->port, i2s->tx_pins.ws->num, 0U);
     }
   }
 
@@ -652,10 +673,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->tx_pins.sda != NULL) {
     if (i2s->tx_pins.sda->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->tx_pins.sda->num, 0);
+      SCU_CLK_PinConfigure (i2s->tx_pins.sda->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->tx_pins.sda->port, i2s->tx_pins.sda->num, 0);
+      SCU_PinConfigure(i2s->tx_pins.sda->port, i2s->tx_pins.sda->num, 0U);
     }
   }
 
@@ -663,10 +684,10 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   if (i2s->tx_pins.mclk != NULL) {
     if (i2s->tx_pins.mclk->port == 0x10U) {
       // CLK1, CLK2 or CLK3
-      SCU_CLK_PinConfigure (i2s->tx_pins.mclk->num, 0);
+      SCU_CLK_PinConfigure (i2s->tx_pins.mclk->num, 0U);
     
     } else {
-      SCU_PinConfigure(i2s->tx_pins.mclk->port, i2s->tx_pins.mclk->num, 0);
+      SCU_PinConfigure(i2s->tx_pins.mclk->port, i2s->tx_pins.mclk->num, 0U);
     }
   }
 
@@ -687,11 +708,18 @@ static int32_t I2S_Uninitialize (I2S_RESOURCES *i2s) {
   \return      \ref execution_status
 */
 static int32_t I2S_PowerControl (ARM_POWER_STATE state, I2S_RESOURCES *i2s) {
+  uint32_t tout_cnt;
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
       // Disable I2S IRQ
-      NVIC_DisableIRQ(i2s->irq_num);
+      NVIC_DisableIRQ( (IRQn_Type) i2s->irq_num);
 
       if ((i2s->dma_tx == NULL) && (i2s->info->status.tx_busy != 0U)) {
         // Disable DMA channel
@@ -704,13 +732,19 @@ static int32_t I2S_PowerControl (ARM_POWER_STATE state, I2S_RESOURCES *i2s) {
 
       // Reset I2S peripheral
       LPC_RGU->RESET_CTRL1 = (1U << 20) | (~(LPC_RGU->RESET_ACTIVE_STATUS1));
-      while ((LPC_RGU->RESET_ACTIVE_STATUS1 & (1U << 20)) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((LPC_RGU->RESET_ACTIVE_STATUS1 & (1U << 20)) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
 
       // Disable I2S peripheral clock
       LPC_CCU2->CLK_APLL_CFG &= ~CCU_CLK_CFG_RUN;
 
       // Clear pending I2S interrupts in NVIC
-      NVIC_ClearPendingIRQ(i2s->irq_num);
+      NVIC_ClearPendingIRQ( (IRQn_Type) i2s->irq_num);
 
       // Clear driver variables
       i2s->info->status.frame_error   = 0U;
@@ -734,11 +768,23 @@ static int32_t I2S_PowerControl (ARM_POWER_STATE state, I2S_RESOURCES *i2s) {
 
       // Enable I2S peripheral clock
       LPC_CCU2->CLK_APLL_CFG |=  CCU_CLK_CFG_AUTO | CCU_CLK_CFG_RUN;
-      while ((LPC_CCU2->CLK_APLL_STAT & CCU_CLK_CFG_RUN) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((LPC_CCU2->CLK_APLL_STAT & CCU_CLK_CFG_RUN) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Reset I2S peripheral
       LPC_RGU->RESET_CTRL1 = (1U << 20) | (~(LPC_RGU->RESET_ACTIVE_STATUS1));
-      while ((LPC_RGU->RESET_ACTIVE_STATUS1 & (1U << 20)) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((LPC_RGU->RESET_ACTIVE_STATUS1 & (1U << 20)) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // I2S0 and I2S1 RX_SCK and TX_SCK are defined by RXMODE and TXMODE registers
       LPC_CREG->CREG6 &= ~ (0x0FU << 12);
@@ -765,12 +811,8 @@ static int32_t I2S_PowerControl (ARM_POWER_STATE state, I2S_RESOURCES *i2s) {
       i2s->info->flags = I2S_FLAG_POWERED | I2S_FLAG_INITIALIZED;
 
       // Clear and Enable SAI IRQ
-      NVIC_ClearPendingIRQ(i2s->irq_num);
-      NVIC_EnableIRQ(i2s->irq_num);
-
-      break;
-
-    default: return ARM_DRIVER_ERROR_UNSUPPORTED;
+      NVIC_ClearPendingIRQ( (IRQn_Type) i2s->irq_num);
+      NVIC_EnableIRQ( (IRQn_Type) i2s->irq_num);
   }
   return ARM_DRIVER_OK;
 }
@@ -809,7 +851,7 @@ static int32_t I2S_Send (const void *data, uint32_t num, I2S_RESOURCES *i2s) {
   i2s->info->status.tx_underflow = 0U;
 
   // Save transmit buffer info
-  i2s->info->tx.buf = (uint8_t *)data;
+  i2s->info->tx.buf = (uint8_t *)(uint32_t)data;
   i2s->info->tx.cnt = 0U;
 
   // Convert from number of samples to number of bytes
@@ -824,7 +866,7 @@ static int32_t I2S_Send (const void *data, uint32_t num, I2S_RESOURCES *i2s) {
 
     if (i2s->info->tx.residue_cnt == 4U) {
       // Write 32bits to TX FIFO
-      i2s->reg->TXFIFO = *(__packed uint32_t *)(i2s->info->tx.residue_buf);
+      i2s->reg->TXFIFO = __UNALIGNED_UINT32_READ(i2s->info->tx.residue_buf);
 
       // There is no valid data in residue buffer
       i2s->info->tx.residue_cnt = 0U;
@@ -852,31 +894,31 @@ static int32_t I2S_Send (const void *data, uint32_t num, I2S_RESOURCES *i2s) {
                                      (uint32_t)i2s->info->tx.buf + i2s->info->tx.cnt,
                                      (uint32_t)(&(i2s->reg->TXFIFO)),
                                      num / 4U,
-                                     GPDMA_CH_CONTROL_SBSIZE(GPDMA_BSIZE_1)                   |
-                                     GPDMA_CH_CONTROL_DBSIZE(GPDMA_BSIZE_1)                   |
-                                     GPDMA_CH_CONTROL_SWIDTH(GPDMA_WIDTH_WORD)                |
-                                     GPDMA_CH_CONTROL_DWIDTH(GPDMA_WIDTH_WORD)                |
-                                     GPDMA_CH_CONTROL_S                                       |
-                                     GPDMA_CH_CONTROL_D                                       |
-                                     GPDMA_CH_CONTROL_I                                       |
+                                     GPDMA_CH_CONTROL_SBSIZE(GPDMA_BSIZE_1)                 |
+                                     GPDMA_CH_CONTROL_DBSIZE(GPDMA_BSIZE_1)                 |
+                                     GPDMA_CH_CONTROL_SWIDTH(GPDMA_WIDTH_WORD)              |
+                                     GPDMA_CH_CONTROL_DWIDTH(GPDMA_WIDTH_WORD)              |
+                                     GPDMA_CH_CONTROL_S                                     |
+                                     GPDMA_CH_CONTROL_D                                     |
+                                     GPDMA_CH_CONTROL_I                                     |
                                      GPDMA_CH_CONTROL_SI,
-                                     GPDMA_CH_CONFIG_DEST_PERI(i2s->dma_tx->peripheral) |
-                                     GPDMA_CH_CONFIG_FLOWCNTRL(GPDMA_TRANSFER_M2P_CTRL_DMA)   |
-                                     GPDMA_CH_CONFIG_IE                                       |
-                                     GPDMA_CH_CONFIG_ITC                                      |
+                                     GPDMA_CH_CONFIG_DEST_PERI(i2s->dma_tx->peripheral)     |
+                                     GPDMA_CH_CONFIG_FLOWCNTRL(GPDMA_TRANSFER_M2P_CTRL_DMA) |
+                                     GPDMA_CH_CONFIG_IE                                     |
+                                     GPDMA_CH_CONFIG_ITC                                    |
                                      GPDMA_CH_CONFIG_E,
                                      i2s->dma_tx->cb_event);
       if (stat == -1) { return ARM_DRIVER_ERROR; }
 
       // Set FIFO level and enable TX DMA
-      i2s->reg->DMA1 = (((i2s->tx_fifo_level << I2S_DMA_TX_DEPTH_DMA_POS) & I2S_DMA_TX_DEPTH_DMA_MSK) |
+      i2s->reg->DMA1 = ((((uint32_t)i2s->tx_fifo_level << I2S_DMA_TX_DEPTH_DMA_POS) & I2S_DMA_TX_DEPTH_DMA_MSK) |
                          (I2S_DMA_TX_DMA_ENABLE));
     }
   // Interrupt mode
   } else {
     // Set FIFO level, to trigger TX interrupt
     val  = i2s->reg->IRQ & ~I2S_IRQ_TX_DEPTH_IRQ_MSK;
-    val |= (i2s->tx_fifo_level << I2S_IRQ_TX_DEPTH_IRQ_POS) & I2S_IRQ_TX_DEPTH_IRQ_MSK;
+    val |= ((uint32_t)i2s->tx_fifo_level << I2S_IRQ_TX_DEPTH_IRQ_POS) & I2S_IRQ_TX_DEPTH_IRQ_MSK;
     i2s->reg->IRQ = val;
     // Enable I2S transmitter interrupt
     i2s->reg->IRQ |= I2S_IRQ_TX_IRQ_ENABLE;
@@ -975,14 +1017,14 @@ static int32_t I2S_Receive (void *data, uint32_t num, I2S_RESOURCES *i2s) {
     if (stat == -1) { return ARM_DRIVER_ERROR; }
 
     // Set FIFO level and enable RX DMA
-    i2s->reg->DMA2 = (((i2s->rx_fifo_level << I2S_DMA_RX_DEPTH_DMA_POS) & I2S_DMA_RX_DEPTH_DMA_MSK) |
+    i2s->reg->DMA2 = ((((uint32_t)i2s->rx_fifo_level << I2S_DMA_RX_DEPTH_DMA_POS) & I2S_DMA_RX_DEPTH_DMA_MSK) |
                        (I2S_DMA_RX_DMA_ENABLE));
 
   // Interrupt mode
   } else {
     // Set FIFO level, to trigger RX interrupt
     val  = i2s->reg->IRQ & ~I2S_IRQ_RX_DEPTH_IRQ_MSK;
-    val |= (i2s->rx_fifo_level << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
+    val |= ((uint32_t)i2s->rx_fifo_level << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
     i2s->reg->IRQ = val;
     // Enable I2S receive interrupt
     i2s->reg->IRQ |= I2S_IRQ_RX_IRQ_ENABLE;
@@ -1031,9 +1073,9 @@ static uint32_t I2S_GetRxCount (I2S_RESOURCES *i2s) {
   \return      common \ref execution_status and driver specific \ref sai_execution_status
 */
 static int32_t I2S_Control (uint32_t control, uint32_t arg1, uint32_t arg2, I2S_RESOURCES *i2s) {
-  uint32_t  val, pclk, mclk, master, data_bits;
+  uint32_t  val, pclk, mclk;
   uint32_t  reg_daoi, reg_rate, reg_bitrate, reg_mode;
-  uint8_t   x_best, y_best;
+  uint8_t   x_best, y_best, master, data_bits;
   double    div_exact, div, delta;
   I2S_PINS *pins;
 
@@ -1124,7 +1166,7 @@ static int32_t I2S_Control (uint32_t control, uint32_t arg1, uint32_t arg2, I2S_
         } else {
           if ((i2s->dma_rx != NULL) && ((i2s->reg->DMA2 & I2S_DMA_RX_DMA_ENABLE) == 0U)) {
             // Set user RX FIFO level
-            val |= (i2s->rx_fifo_level  << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
+            val |= ((uint32_t)i2s->rx_fifo_level  << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
 
             // Enable I2S receive interrupt
             i2s->reg->IRQ |= I2S_IRQ_RX_IRQ_ENABLE;
@@ -1255,19 +1297,19 @@ static int32_t I2S_Control (uint32_t control, uint32_t arg1, uint32_t arg2, I2S_
 
   // Data size
   switch ((control & ARM_SAI_DATA_SIZE_Msk) >> ARM_SAI_DATA_SIZE_Pos) {
-    case 8-1:
-      data_bits = 8;
+    case 8U-1U:
+      data_bits = 8U;
       // 8-Data bit, WS_HALFPERIOD = DataBit-1 = 7
       reg_daoi |= (7U  << I2S_DAO_DAI_WS_HALFPERIOD_POS);
       break;
-    case 16-1:
-      data_bits = 16;
+    case 16U-1U:
+      data_bits = 16U;
       // 16-Data bit, WS_HALFPERIOD = DataBit-1 = 15
       reg_daoi |= (1U  << I2S_DAO_DAI_WORDWIDTH_POS);
       reg_daoi |= (15U << I2S_DAO_DAI_WS_HALFPERIOD_POS);
       break;
-    case 32-1:
-      data_bits = 32;
+    case 32U-1U:
+      data_bits = 32U;
       // 32-Data bit, WS_HALFPERIOD = DataBit-1 = 31
       reg_daoi |= (3U  << I2S_DAO_DAI_WORDWIDTH_POS);
       reg_daoi |= (31U << I2S_DAO_DAI_WS_HALFPERIOD_POS);
@@ -1338,7 +1380,7 @@ static int32_t I2S_Control (uint32_t control, uint32_t arg1, uint32_t arg2, I2S_
       if (div_exact > div) { delta = div_exact - div;       }
       else                 { delta = div       - div_exact; }
       if (((delta * 100U) / div_exact) > I2S_FREQ_TOLERANCE) {return ARM_SAI_ERROR_AUDIO_FREQ; }
-      reg_rate = (y_best << I2S_TX_RX_RATE_Y_DIVIDER_POS) | (x_best << I2S_TX_RX_RATE_X_DIVIDER_POS);
+      reg_rate = ((uint32_t)y_best << I2S_TX_RX_RATE_Y_DIVIDER_POS) | ((uint32_t)x_best << I2S_TX_RX_RATE_X_DIVIDER_POS);
     }
   }
 
@@ -1422,7 +1464,7 @@ static void I2S_IRQHandler (I2S_RESOURCES *i2s) {
         while (((i2s->info->tx.cnt + 4U) <= i2s->info->tx.num) && (level != 0U)) {
           // Copy all available 32bit data to FIFO, until FIFO is full
           ptr_buf = i2s->info->tx.buf + i2s->info->tx.cnt;
-          i2s->reg->TXFIFO = *(__packed uint32_t *)(ptr_buf);
+          i2s->reg->TXFIFO = __UNALIGNED_UINT32_READ(ptr_buf);
 
           // Update TX buffer info
           i2s->info->tx.cnt += 4U;
@@ -1467,7 +1509,7 @@ static void I2S_IRQHandler (I2S_RESOURCES *i2s) {
         while (((i2s->info->rx.cnt + 4U) <= i2s->info->rx.num) && (level != 0U)) {
           // Read FIFO
           ptr_buf = i2s->info->rx.buf + i2s->info->rx.cnt;
-          *(__packed uint32_t *)(ptr_buf) = i2s->reg->RXFIFO;
+          __UNALIGNED_UINT32_WRITE(ptr_buf, i2s->reg->RXFIFO);
 
           i2s->info->rx.cnt += 4U;
           level--;
@@ -1562,7 +1604,7 @@ static void I2S_GPDMA_Rx_Event (uint32_t event, I2S_RESOURCES *i2s) {
       } else {
         // Set user defined level, to retrieve remaining requested data
         val  = i2s->reg->IRQ & ~I2S_IRQ_RX_DEPTH_IRQ_MSK;
-        val |= (i2s->rx_fifo_level << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
+        val |= ((uint32_t)i2s->rx_fifo_level << I2S_IRQ_RX_DEPTH_IRQ_POS) & I2S_IRQ_RX_DEPTH_IRQ_MSK;
         i2s->reg->IRQ = val;
       
       }

@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2021 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.4
+ * $Date:        5. January 2021
+ * $Revision:    V2.7
  *
  * Project:      MCI Driver Definitions for NXP LPC18xx
  * -------------------------------------------------------------------------- */
@@ -39,12 +40,12 @@
 #error "SDMMC not configured in RTE_Device.h!"
 #endif
 /* Driver flag definitions */
-#define MCI_INIT            (1 << 0)    /* MCI initialized         */
-#define MCI_POWER           (1 << 1)    /* MCI powered on          */
-#define MCI_SETUP           (1 << 2)    /* MCI configured          */
-#define MCI_WRITE           (1 << 3)    /* Write transfer          */
-#define MCI_STREAM          (1 << 4)    /* Stream stransfer        */
-#define MCI_RESP_LONG       (1 << 5)    /* Long response expected  */
+#define MCI_INIT            (1U << 0)   /* MCI initialized         */
+#define MCI_POWER           (1U << 1)   /* MCI powered on          */
+#define MCI_SETUP           (1U << 2)   /* MCI configured          */
+#define MCI_WRITE           (1U << 3)   /* Write transfer          */
+#define MCI_STREAM          (1U << 4)   /* Stream transfer         */
+#define MCI_RESP_LONG       (1U << 5)   /* Long response expected  */
 
 
 #define MCI_RESPONSE_EXPECTED_Msk (ARM_MCI_RESPONSE_SHORT      | \
@@ -78,18 +79,18 @@
                                   SDMMC_RINTSTS_SDIO_INTERRUPT)
 
 /* Clock Control Unit register bits */
-#define CCU_CLK_CFG_RUN   (1 << 0)
-#define CCU_CLK_CFG_AUTO  (1 << 1)
-#define CCU_CLK_STAT_RUN  (1 << 0)
+#define CCU_CLK_CFG_RUN   (1U << 0)
+#define CCU_CLK_CFG_AUTO  (1U << 1)
+#define CCU_CLK_STAT_RUN  (1U << 0)
 
 /* Reset Generation Unit register bits */
-#define RGU_RESET_CTRL0_SDIO_RST (1 << 20)
+#define RGU_RESET_CTRL0_SDIO_RST (1U << 20)
 
 /* CGU BASE_SDIO_CLK CLK_SEL definition */
-#define SDIO_CLK_SEL_PLL1 0x09
+#define SDIO_CLK_SEL_PLL1 0x09U
 
 /* Number of DMA descriptors */
-#define SDMMC_DMA_DESC_CNT 4
+#define SDMMC_DMA_DESC_CNT 4U
 
 /* DMA descriptor bit definitions */
 #define SDMMC_DMA_DESC_DIC (1U <<  1)   /* Disable Interrupt on Completion    */
@@ -121,6 +122,7 @@ typedef struct _MCI_INFO {
   uint32_t             *response;       /* Pointer to response buffer         */
   MCI_XFER              xfer;           /* Data transfer description          */
   uint8_t               flags;          /* Driver state flags                 */
+  uint8_t               reserved[3];
 } MCI_INFO;
 
 /* SDMMC CTRL Register Bitmask Definitions */
@@ -303,5 +305,8 @@ typedef struct _MCI_INFO {
 #define SDMMC_IDINTEN_CES                         (1U <<  5)
 #define SDMMC_IDINTEN_NIS                         (1U <<  8)
 #define SDMMC_IDINTEN_AIS                         (1U <<  9)
+
+/* Global functions and variables exported by driver .c module */
+extern ARM_DRIVER_MCI Driver_MCI0;
 
 #endif /* __MCI_LPC18XX_H */

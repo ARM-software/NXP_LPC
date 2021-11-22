@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.5
+ * $Date:        20. December 2019
+ * $Revision:    V2.7
  *
  * Project:      USART Driver Definitions for NXP LPC18xx
  * -------------------------------------------------------------------------- */
@@ -24,16 +25,19 @@
 #ifndef __USART_LPC18XX_H
 #define __USART_LPC18XX_H
 
-#include "LPC18xx.h"
 #include "Driver_USART.h"
 
+#include "LPC18xx.h"
 #include "SCU_LPC18xx.h"
 #include "GPDMA_LPC18xx.h"
 
+#include "RTE_Device.h"
+#include "RTE_Components.h"
+
 // Clock Control Unit register
-#define CCU_CLK_CFG_RUN     (1 << 0)
-#define CCU_CLK_CFG_AUTO    (1 << 1)
-#define CCU_CLK_STAT_RUN    (1 << 0)
+#define CCU_CLK_CFG_RUN              (1U << 0)
+#define CCU_CLK_CFG_AUTO             (1U << 1)
+#define CCU_CLK_STAT_RUN             (1U << 0)
 
 // USART register interface definitions
 // USART Divisor Latch register LSB
@@ -175,7 +179,6 @@
 #define USART_FLAG_CONFIGURED        (1U << 2)
 #define USART_FLAG_TX_ENABLED        (1U << 3)
 #define USART_FLAG_RX_ENABLED        (1U << 4)
-#define USART_FLAG_SEND_ACTIVE       (1U << 5)
 
 // USART synchronous xfer modes
 #define USART_SYNC_MODE_TX           ( 1U )
@@ -200,15 +203,16 @@
 #define USART_TRIG_LVL_8             (0x80U)
 #define USART_TRIG_LVL_14            (0xC0U)
 
-#define FRACT_DIV(add, mul)      { ((uint16_t)((1U << 12) + (((uint32_t)(add << 24) / (mul)) >> 12))), ((uint8_t) (((mul) << 4) | add)), }
+#define FRACT_DIV(add, mul)      { ((uint16_t)((1U << 12) + (((uint32_t)(add << 24) / (mul)) >> 12))), ((uint8_t) (((mul) << 4) | add)), 0U,}
 
-typedef struct _FRACT_DIV {
+typedef struct {
   uint16_t val;
   uint8_t  add_mul;
+  uint8_t  reserved;
 } FRACT_DIVIDER;
 
 // USART Transfer Information (Run-Time)
-typedef struct _USART_TRANSFER_INFO {
+typedef struct {
   uint32_t                rx_num;        // Total number of data to be received
   uint32_t                tx_num;        // Total number of data to be send
   uint8_t                *rx_buf;        // Pointer to in data buffer
@@ -219,49 +223,54 @@ typedef struct _USART_TRANSFER_INFO {
   uint8_t                 rx_dump_val;   // Receive dump value (used in USART_SYNC_MASTER_MODE_TX)
   uint8_t                 send_active;   // Send active flag
   uint8_t                 sync_mode;     // Synchronous mode
+  uint8_t                 tx_fifo_level; // Number of items in transmit FIFO
+  uint8_t                 reserved[3];
 } USART_TRANSFER_INFO;
 
-typedef struct _USART_RX_STATUS {
+typedef struct {
   uint8_t rx_busy;                       // Receiver busy flag
   uint8_t rx_overflow;                   // Receive data overflow detected (cleared on start of next receive operation)
   uint8_t rx_break;                      // Break detected on receive (cleared on start of next receive operation)
   uint8_t rx_framing_error;              // Framing error detected on receive (cleared on start of next receive operation)
   uint8_t rx_parity_error;               // Parity error detected on receive (cleared on start of next receive operation)
+  uint8_t reserved[3];
 } USART_RX_STATUS;
 
 // USART Information (Run-Time)
-typedef struct _USART_INFO {
+typedef struct {
   ARM_USART_SignalEvent_t cb_event;      // Event callback
   USART_RX_STATUS         rx_status;     // Receive status flags
   USART_TRANSFER_INFO     xfer;          // Transfer information
+  uint32_t                baudrate;      // Baudrate
   uint8_t                 mode;          // USART mode
   uint8_t                 flags;         // USART driver flags
-  uint32_t                baudrate;      // Baudrate
+  uint8_t                 reserved[2];
 } USART_INFO;
 
 // USART DMA
-typedef const struct _USART_DMA {
+typedef const struct {
   uint8_t                 channel;       // DMA Channel
   uint8_t                 peripheral;    // DMA mux
   uint8_t                 peripheral_sel;// DMA mux selection
+  uint8_t                 reserved;
   GPDMA_SignalEvent_t     cb_event;      // DMA Event callback
 } USART_DMA;
 
 // USART Pin Configuration
-typedef const struct _USART_PINS {
-  PIN_ID                 *tx;            // TX  Pin identifier
-  PIN_ID                 *rx;            // RX  Pin identifier
-  PIN_ID                 *clk;           // CLK  Pin identifier
-  PIN_ID                 *cts;           // CTS Pin identifier
-  PIN_ID                 *rts;           // RTS Pin identifier
-  PIN_ID                 *dcd;           // DCD Pin identifier
-  PIN_ID                 *dsr;           // DSR Pin identifier
-  PIN_ID                 *dtr;           // DTR Pin identifier
-  PIN_ID                 *ri;            // RI  Pin identifier
+typedef const struct {
+  const PIN_ID           *tx;            // TX  Pin identifier
+  const PIN_ID           *rx;            // RX  Pin identifier
+  const PIN_ID           *clk;           // CLK  Pin identifier
+  const PIN_ID           *cts;           // CTS Pin identifier
+  const PIN_ID           *rts;           // RTS Pin identifier
+  const PIN_ID           *dcd;           // DCD Pin identifier
+  const PIN_ID           *dsr;           // DSR Pin identifier
+  const PIN_ID           *dtr;           // DTR Pin identifier
+  const PIN_ID           *ri;            // RI  Pin identifier
 } USART_PINS;
 
 // USART Clocks Configuration
-typedef const struct _USART_CLOCK {
+typedef const struct {
   __IO uint32_t          *reg_cfg;       // USART register interface clock configuration register
   __I  uint32_t          *reg_stat;      // USART register interface clock status register
   __IO uint32_t          *peri_cfg;      // USART peripheral clock configuration register
@@ -270,26 +279,40 @@ typedef const struct _USART_CLOCK {
 } USART_CLOCKS;
 
 // USART Reset Configuration
-typedef const struct _USART_RESET {
+typedef const struct {
        uint32_t           reg_cfg_val;   // USART reset bit 
   __IO uint32_t          *reg_cfg;       // USART reset control register
   __I  uint32_t          *reg_stat;      // USART reset active status register
 } USART_RESET;
 
 // USART Resources definitions
-typedef struct {
+typedef const struct {
   ARM_USART_CAPABILITIES  capabilities;  // Capabilities
   LPC_USARTn_Type        *reg;           // Pointer to USART peripheral
   LPC_UART1_Type         *uart_reg;      // Pointer to UART peripheral
   USART_PINS              pins;          // USART pins configuration
   USART_CLOCKS            clk;           // USART clocks configuration
   USART_RESET             rst;           // USART reset configuration
-  IRQn_Type               irq_num;       // USART IRQ Number
+  int32_t                 irq_num;       // USART IRQ Number
   uint32_t                trig_lvl;      // FIFO Trigger level
   USART_DMA              *dma_tx;
   USART_DMA              *dma_rx;
   USART_INFO             *info;          // Run-Time Information
-  float                   sc_oversamp;   // SmartCard oversampling ratio
-} const USART_RESOURCES;
+  uint16_t                sc_oversamp;   // SmartCard oversampling ratio
+} USART_RESOURCES;
+
+// Global functions and variables exported by driver .c module */
+#if (RTE_USART0)
+extern ARM_DRIVER_USART Driver_USART0;
+#endif
+#if (RTE_UART1)
+extern ARM_DRIVER_USART Driver_USART1;
+#endif
+#if (RTE_USART2)
+extern ARM_DRIVER_USART Driver_USART2;
+#endif
+#if (RTE_USART3)
+extern ARM_DRIVER_USART Driver_USART3;
+#endif
 
 #endif /* __USART_LPC18XX_H */

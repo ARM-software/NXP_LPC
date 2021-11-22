@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.7
+ * $Date:        04. April 2019
+ * $Revision:    V2.8
  *
  * Driver:       Driver_USBD1
  * Configured:   via RTE_Device.h configuration file
@@ -40,6 +41,9 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.8
+ *    Added support for ARM Compiler 6
+ *    Added timeout to wait loops
  *  Version 2.7
  *    Removed unnecessary __packed specifier for structures dQH_t and dTD_t
  *  Version 2.6
@@ -68,18 +72,7 @@
  *    Initial release
  */
 
-
-#include <stdint.h>
-#include <string.h>
-
-#include "Driver_USBD.h"
-
-#include "LPC18xx.h"
 #include "USB_LPC18xx.h"
-#include "SCU_LPC18xx.h"
-
-#include "RTE_Device.h"
-#include "RTE_Components.h"
 
 #if      (RTE_USB_USB1 == 0)
 #error   "USB1 is not enabled in the RTE_Device.h!"
@@ -95,16 +88,12 @@
 #error  Too many Endpoints, maximum IN/OUT Endpoint pairs that this driver supports is 3 !!!
 #endif
 
-extern uint8_t USB1_role;
-extern uint8_t USB1_state;
-
-extern void USB1_PinsConfigure   (void);
-extern void USB1_PinsUnconfigure (void);
-
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT               (SystemCoreClock / 64U)
 
 // USBD Driver *****************************************************************
 
-#define ARM_USBD_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,7)
+#define ARM_USBD_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,8)
 
 // Driver Version
 static const ARM_DRIVER_VERSION usbd_driver_version = { ARM_USBD_API_VERSION, ARM_USBD_DRV_VERSION };
@@ -114,6 +103,9 @@ static const ARM_USBD_CAPABILITIES usbd_driver_capabilities = {
   0U,   // VBUS Detection
   0U,   // Event VBUS On
   0U    // Event VBUS Off
+#if (defined(ARM_USBD_API_VERSION) && (ARM_USBD_API_VERSION >= 0x202U))
+, 0U
+#endif
 };
 
 #define LPC_USBx                        LPC_USB1
@@ -157,12 +149,16 @@ static ARM_USBD_STATE      usbd_state;
 static uint32_t            setup_packet[2];     // Setup packet data
 static volatile uint8_t    setup_received;      // Setup packet received
 
-static dQH_t __align(2048) dQH[(USBD_MAX_ENDPOINT_NUM + 1U) * 2U];      // Queue Heads
-static dTD_t __align(  32) dTD[(USBD_MAX_ENDPOINT_NUM + 1U) * 2U];      // Transfer Descriptors
+static dQH_t __ALIGNED(2048) dQH[(USBD_MAX_ENDPOINT_NUM + 1U) * 2U];      // Queue Heads
+static dTD_t __ALIGNED(  32) dTD[(USBD_MAX_ENDPOINT_NUM + 1U) * 2U];      // Transfer Descriptors
 
 // Function prototypes
+void USBD1_IRQ (void);
 static int32_t USBD_EndpointConfigure (uint8_t ep_addr, uint8_t ep_type, uint16_t ep_max_packet_size);
 
+// External Functions
+extern void USB1_PinsConfigure (void);
+extern void USB1_PinsUnconfigure (void);
 
 // Auxiliary functions
 
@@ -171,12 +167,18 @@ static int32_t USBD_EndpointConfigure (uint8_t ep_addr, uint8_t ep_type, uint16_
   \brief       Flush Endpoint.
 */
 static void USBD_HW_EndpointFlush (uint8_t ep_addr) {
-  uint32_t ep_msk;
+  uint32_t ep_msk, tout_cnt;
 
   ep_msk = EP_MSK(ep_addr);
 
   LPC_USBx->ENDPTFLUSH = ep_msk;
-  while (LPC_USBx->ENDPTFLUSH & ep_msk);
+  tout_cnt = LOOP_MAX_CNT;
+  while (LPC_USBx->ENDPTFLUSH & ep_msk) {
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      break;
+    }
+  }
 }
 
 /**
@@ -184,15 +186,15 @@ static void USBD_HW_EndpointFlush (uint8_t ep_addr) {
   \brief       Reset USB Endpoint settings and variables.
 */
 static void USBD_Reset (void) {
-  uint8_t i;
+  uint8_t  i;
+  uint32_t tout_cnt;
 
   // Reset global variables
   setup_packet[0] = 0U;
   setup_packet[1] = 0U;
   setup_received  = 0U;
-  memset((void *)&usbd_state, 0, sizeof(usbd_state));
-  memset((void *)dQH,         0, sizeof(dQH));
-  memset((void *)dTD,         0, sizeof(dTD));
+  memset((void *)dQH, 0, sizeof(dQH));
+  memset((void *)dTD, 0, sizeof(dTD));
   for (i = 1U; i <= USBD_MAX_ENDPOINT_NUM; i++) {
     ENDPTCTRL(i) &= ~(USB_ENDPTCTRL_RXE | USB_ENDPTCTRL_TXE);
   }
@@ -204,11 +206,23 @@ static void USBD_Reset (void) {
   LPC_USBx->ENDPTSETUPSTAT = LPC_USBx->ENDPTSETUPSTAT;
   LPC_USBx->ENDPTCOMPLETE  = LPC_USBx->ENDPTCOMPLETE;
 
-  while (LPC_USBx->ENDPTPRIME);
+  tout_cnt = LOOP_MAX_CNT;
+  while (LPC_USBx->ENDPTPRIME) {
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      break;
+    }
+  }
 
   // Clear all Primed buffers
   LPC_USBx->ENDPTFLUSH = 0xFFFFFFFFUL;
-  while (LPC_USBx->ENDPTFLUSH);
+  tout_cnt = LOOP_MAX_CNT;
+  while (LPC_USBx->ENDPTFLUSH) {
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      break;
+    }
+  }
 
   // Interrupt threshold control: no threshold
   LPC_USBx->USBCMD_D &= ~(USB_USBCMD_D_ITC(0xFFUL));
@@ -260,7 +274,7 @@ static void USBD_HW_EndpointTransfer (uint8_t ep_addr) {
   dQH_t   *ptr_dqh;
   dTD_t   *ptr_dtd;
   uint8_t *data;
-  uint32_t ep_msk, num;
+  uint32_t ep_msk, num, tout_cnt;
   uint8_t  ep_idx;
 
   ep_idx  =  EP_IDX(ep_addr);
@@ -273,7 +287,13 @@ static void USBD_HW_EndpointTransfer (uint8_t ep_addr) {
 
   if (num > 0x4000U) { num = 0x4000U; } // Maximum transfer length is 16k
 
-  while (LPC_USBx->ENDPTSTAT & ep_msk);
+  tout_cnt = LOOP_MAX_CNT;
+  while (LPC_USBx->ENDPTSTAT & ep_msk){
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      return;
+    }
+  }
 
   memset (ptr_dtd, 0, sizeof(dTD_t));
 
@@ -296,7 +316,7 @@ static void USBD_HW_EndpointTransfer (uint8_t ep_addr) {
   ptr_dqh->dTD_token &= ~USB_bTD_TOKEN_STATUS_MSK;              // Clear status
   ptr_dqh->next_dTD   =  (uint32_t)(ptr_dtd);                   // Save Transfer Descriptor address to Queue Head overlay
 
-  ptr_dqh->num_transferring = num;
+  ptr_dqh->num_transferring = num & 0xFFFFU;
 
   LPC_USBx->ENDPTPRIME |= ep_msk;       // Prime Endpoint -> Start Transfer
 }
@@ -363,6 +383,13 @@ static int32_t USBD_Uninitialize (void) {
   \return      \ref execution_status
 */
 static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
+  uint32_t tout_cnt;
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
@@ -370,8 +397,10 @@ static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
       NVIC_ClearPendingIRQ (USB1_IRQn);                 // Clear pending interrupt
       USB1_state &= ~USBD_DRIVER_POWERED;               // Clear powered flag
                                                         // Reset variables
-      setup_received =  0U;
-      memset((void *)&usbd_state, 0, sizeof(usbd_state));
+      setup_received    = 0U;
+      usbd_state.active = 0U;
+      usbd_state.speed  = 0U;
+      usbd_state.vbus   = 0U;
       memset((void *)dQH,         0, sizeof(dQH));
       memset((void *)dTD,         0, sizeof(dTD));
 
@@ -379,14 +408,29 @@ static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
       SCU_USB1_PinConfigure (SCU_USB1_PIN_CFG_ESEA);    // Reset SCU Register
 #endif
 
-      if ((LPC_CGU->BASE_USB1_CLK & 1U) ==  0U) {
-        LPC_CCU1->CLK_USB1_CFG    &= ~1U;               // Disable USB1 Base Clock
-        while (LPC_CCU1->CLK_USB1_STAT    & 1U);
+      if ((LPC_CGU->BASE_USB1_CLK & 1U) == 0U) {
+        LPC_CCU1->CLK_USB1_CFG &= ~1U;                  // Disable USB1 Base Clock
+        tout_cnt = LOOP_MAX_CNT;
+        while (LPC_CCU1->CLK_USB1_STAT & 1U) {
+          if (tout_cnt-- == 0U) {
+            __NOP();
+            break;
+          }
+        }
         LPC_CCU1->CLK_M3_USB1_CFG &= ~1U;               // Disable USB1 Register Interface Clock
-        while (LPC_CCU1->CLK_M3_USB1_STAT & 1U);
-        LPC_CGU->BASE_USB1_CLK     =  1U;               // Disable Base Clock
+        tout_cnt = LOOP_MAX_CNT;
+        while (LPC_CCU1->CLK_M3_USB1_STAT & 1U) {
+          if (tout_cnt-- == 0U) {
+             __NOP();
+             break;
+          }
+        }
+        LPC_CGU->BASE_USB1_CLK =  1U;                   // Disable Base Clock
       }
       break;
+
+    case ARM_POWER_LOW:
+      return ARM_DRIVER_ERROR_UNSUPPORTED;
 
     case ARM_POWER_FULL:
       if ((USB1_state & USBD_DRIVER_INITIALIZED) == 0U) { return ARM_DRIVER_ERROR; }
@@ -395,13 +439,31 @@ static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
       LPC_CGU->BASE_USB1_CLK     = (0x01U << 11) |      // Auto-block Enable
                                    (0x0CU << 24) ;      // Clock source: IDIVA
       LPC_CCU1->CLK_M3_USB1_CFG |=  1U;                 // Enable USB1 Register Interface Clock
-      while (!(LPC_CCU1->CLK_M3_USB1_STAT & 1U));
-      LPC_CCU1->CLK_USB1_CFG    |=  1U;                 // Enable USB1 Base Clock
-      while (!(LPC_CCU1->CLK_USB1_STAT    & 1U));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_CCU1->CLK_M3_USB1_STAT & 1U)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
+      LPC_CCU1->CLK_USB1_CFG |=  1U;                    // Enable USB1 Base Clock
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_CCU1->CLK_USB1_STAT & 1U)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Reset USB Controller
       LPC_USBx->USBCMD_D = USB_USBCMD_D_RST;
-      while (LPC_USBx->USBCMD_D & (USB_USBCMD_D_RS | USB_USBCMD_D_RST));
+      tout_cnt = LOOP_MAX_CNT;
+      while ((LPC_USBx->USBCMD_D & (USB_USBCMD_D_RS | USB_USBCMD_D_RST)) != 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Force device mode and set Setup lockouts off
       LPC_USBx->USBMODE_D =  USB_USBMODE_D_CM1_0(2U) | USB_USBMODE_D_SLOM;
@@ -428,11 +490,7 @@ static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
                               USB_USBINTR_D_URE);       // Reset interrupt enable
 
       USB1_state |=  USBD_DRIVER_POWERED;               // Set powered flag
-      NVIC_EnableIRQ   (USB1_IRQn);                     // Enable interrupt
-      break;
-
-    default:
-      return ARM_DRIVER_ERROR_UNSUPPORTED;
+      NVIC_EnableIRQ (USB1_IRQn);                       // Enable interrupt
   }
 
   return ARM_DRIVER_OK;
@@ -476,7 +534,12 @@ static int32_t USBD_DeviceDisconnect (void) {
   \return      Device State \ref ARM_USBD_STATE
 */
 static ARM_USBD_STATE USBD_DeviceGetState (void) {
-  ARM_USBD_STATE dev_state = { 0U, 0U, 0U };
+  ARM_USBD_STATE dev_state = {
+    0U, 0U, 0U
+#if (defined(ARM_USBD_API_VERSION) && (ARM_USBD_API_VERSION >= 0x202U))
+  , 0U
+#endif
+  };
   uint32_t       portsc1_d;
 
   if ((USB1_state & USBD_DRIVER_POWERED) == 0U) { return dev_state; }
@@ -484,8 +547,8 @@ static ARM_USBD_STATE USBD_DeviceGetState (void) {
   portsc1_d = LPC_USBx->PORTSC1_D;
   dev_state = usbd_state;
 
-  dev_state.active = ((portsc1_d & USB_PORTSC1_D_CCS) != 0U) &&
-                     ((portsc1_d & USB_USBDSTS_D_SLI) == 0U)  ;
+  dev_state.active = ((portsc1_d & USB_PORTSC1_D_CCS)  != 0U) &&
+                     ((portsc1_d & USB_PORTSC1_D_SUSP) == 0U)  ;
 
   return dev_state;
 }
@@ -515,7 +578,7 @@ static int32_t USBD_DeviceSetAddress (uint8_t dev_addr) {
 
   if ((USB1_state & USBD_DRIVER_POWERED) == 0U) { return ARM_DRIVER_ERROR; }
 
-  LPC_USBx->DEVICEADDR  = (dev_addr << USB_DEVICEADDR_USBADR_POS) & USB_DEVICEADDR_USBADR_MSK;
+  LPC_USBx->DEVICEADDR  = (uint32_t)(dev_addr << USB_DEVICEADDR_USBADR_POS) & USB_DEVICEADDR_USBADR_MSK;
   LPC_USBx->DEVICEADDR |=  USB_DEVICEADDR_USBADRA;
 
   return ARM_DRIVER_OK;
@@ -605,7 +668,7 @@ static int32_t USBD_EndpointConfigure (uint8_t  ep_addr,
 
   // Set Endpoint Control Settings
   ENDPTCTRL(ep_num) |=   (USB_ENDPTCTRL_RXT(ep_type) |  // Endpoint Type
-                          USB_ENDPTCTRL_RXR          |  // Data Tggle Rset
+                          USB_ENDPTCTRL_RXR          |  // Data Toggle Reset
                           USB_ENDPTCTRL_RXE          )  // Endpoint Enable
                           << ep_sll;
 
@@ -800,6 +863,7 @@ void USBD1_IRQ (void) {
 
   if ((sts & USB_USBDSTS_D_URI) != 0U) {                // Reset interrupt
     USBD_Reset();
+    usbd_state.speed = ARM_USB_SPEED_FULL;
     SignalDeviceEvent(ARM_USBD_EVENT_RESET);
   }
 

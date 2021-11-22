@@ -1,6 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
- * rights reserved.
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        10. Januar 2020
- * $Revision:    V2.6
+ * $Date:        02. March 2016
+ * $Revision:    V2.5
  *
  * Driver:       Driver_USBH0_HCI
  * Configured:   via RTE_Device.h configuration file
@@ -34,8 +32,6 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
-*  Version 2.6
- *    Removed minor compiler warnings
 *  Version 2.5
  *    Corrected PowerControl function for conditional Power full (driver must be initialized)
  *  Version 2.4
@@ -52,6 +48,7 @@
  *  Version 1.0
  *    Initial release
  */
+
 
 #include "Driver_USBH.h"
 
@@ -90,8 +87,6 @@
 #define USBH_DRIVER_INITIALIZED         (1U << 4)
 #define USBH_DRIVER_POWERED             (1U << 5)
 
-extern ARM_DRIVER_USBH_HCI Driver_USBH0_HCI;
-
 extern uint8_t usb_role;
 extern uint8_t usb_state;
 
@@ -110,10 +105,7 @@ extern int32_t USB_PinsUnconfigure      (void);
 
 // USBH OHCI Driver ************************************************************
 
-#define ARM_USBH_OHCI_DRIVER_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,6)
-
-/* Interrupt Handler Prototype */
-void USBH_IRQ (void);
+#define ARM_USBH_OHCI_DRIVER_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,5)
 
 // Driver Version
 static const ARM_DRIVER_VERSION usbh_ohci_driver_version = { ARM_USBH_API_VERSION, ARM_USBH_OHCI_DRIVER_VERSION };
@@ -121,19 +113,17 @@ static const ARM_DRIVER_VERSION usbh_ohci_driver_version = { ARM_USBH_API_VERSIO
 // Driver Capabilities
 static const ARM_USBH_HCI_CAPABILITIES usbh_ohci_driver_capabilities = {
 #if defined (LPC175x_6x)
-  0x0001U,       // Root HUB available Ports Mask
-  0U,
+  0x0001U       // Root HUB available Ports Mask
 #elif defined (LPC177x_8x)
 #if   (RTE_USB_PORT_CFG == 0)
-  0x0002U,       // Root HUB available Ports Mask
+  0x0002U       // Root HUB available Ports Mask
 #elif (RTE_USB_PORT_CFG == 1)
-  0x0003U,       // Root HUB available Ports Mask
+  0x0003U       // Root HUB available Ports Mask
 #elif (RTE_USB_PORT_CFG == 3)
-  0x0001U,       // Root HUB available Ports Mask
+  0x0001U       // Root HUB available Ports Mask
 #else
-  0x0000U,       // Root HUB available Ports Mask
+  0x0000U       // Root HUB available Ports Mask
 #endif
-  0U,
 #endif
 };
 
@@ -243,7 +233,7 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
       NVIC_EnableIRQ   (USB_IRQn);                      // Enable interrupt
       break;
 
-    case ARM_POWER_LOW:
+    default:
       return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
 
@@ -260,7 +250,6 @@ static int32_t USBH_HCI_PowerControl (ARM_POWER_STATE state) {
   \return      \ref execution_status
 */
 static int32_t USBH_HCI_PortVbusOnOff (uint8_t port, bool power) {
-  (void)power;
   // No GPIO pins used for VBUS control it is controlled by OHCI Controller
 
   if (((1U << port) & usbh_ohci_driver_capabilities.port_mask) == 0U) { return ARM_DRIVER_ERROR; }

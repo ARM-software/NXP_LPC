@@ -1,6 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
- * rights reserved.
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        10. Januar 2020
- * $Revision:    V1.3
+ * $Date:        02. March 2016
+ * $Revision:    V1.2
  *
  * Project:      USB common (Device and Host) module for NXP LPC17xx
  * -------------------------------------------------------------------------- */
@@ -63,29 +61,11 @@
 #endif
 #endif
 
-//Function Prototypes
-void USB_IRQHandler (void);
-int32_t USB_I2C_RegisterRead (uint8_t i2c_addr, uint8_t reg_addr);
-int32_t USB_I2C_RegisterWrite (uint8_t i2c_addr, uint8_t reg_addr, uint8_t reg_val);
-int32_t USB_I2C_Initialize (void);
-int32_t USB_I2C_Uninitialize (void);
-int32_t USB_I2C_DpPullUp (bool enable);
-int32_t USB_I2C_ControlDmPullUp (bool enable);
-int32_t USB_I2C_ControlPullDowns (bool enable);
-
-//External functions
 extern void SystemCoreClockUpdate (void);
-extern int32_t USB_PinsUnconfigure (void);
-extern int32_t USB_PinsConfigure (void);
 
-extern uint8_t usb_role;
-extern uint8_t usb_state;
-extern uint8_t usb_pin_cfg;
-
-uint8_t usb_role = ARM_USB_ROLE_NONE;
-uint8_t usb_state = 0U;
-uint8_t usb_pin_cfg = 0U;
-
+       uint8_t  usb_role     = ARM_USB_ROLE_NONE;
+       uint8_t  usb_state    = 0U;
+       uint8_t  usb_pin_cfg  = 0U;
 #if defined (LPC177x_8x)
 static uint8_t  usb_i2c_init = 0U;
 //static uint16_t usb_i2c_id = 0U;
@@ -114,13 +94,13 @@ int32_t USB_I2C_RegisterRead (uint8_t i2c_addr, uint8_t reg_addr) {
   if (usb_i2c_init == 0U) { return -1; }
 
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    ((uint32_t)i2c_addr << 1)   // I2C Address
+                    (i2c_addr << 1)             // I2C Address
                                     ;           // Write request
   while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
   LPC_USB->I2C_TX =  reg_addr;                  // Register address to read from
   while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    ((uint32_t)i2c_addr << 1) | // I2C Address
+                    (i2c_addr << 1) |           // I2C Address
                     (      1U     ) ;           // Read request
   LPC_USB->I2C_TX = (      1U << 9) |           // STOP bit on end
                         0x55U       ;           // Dummy data transmit to receive
@@ -145,7 +125,7 @@ int32_t USB_I2C_RegisterWrite (uint8_t i2c_addr, uint8_t reg_addr, uint8_t reg_v
   if (usb_i2c_init == 0U) { return -1; }
 
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    ((uint32_t)i2c_addr << 1)   // I2C Address
+                    (i2c_addr << 1)             // I2C Address
                                     ;           // Write request
   while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
   LPC_USB->I2C_TX =  reg_addr;                  // Register address to write to

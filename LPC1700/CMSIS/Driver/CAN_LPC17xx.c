@@ -1,6 +1,5 @@
 /* --------------------------------------------------------------------------
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All
- * rights reserved.
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        10. Januar 2020
- * $Revision:    V1.6
+ * $Date:        02. March 2016
+ * $Revision:    V1.1
  *
  * Driver:       Driver_CAN1/2
  * Configured:   via RTE_Device.h configuration file
@@ -39,18 +37,6 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
- *  Version 1.6
- *    Removed minor compiler warnings
- *    Updated CAN Capabilities structures
- *  Version 1.5
- *    Updated  CANx_PowerControl function
- *  Version 1.4
- *    Corrected SetBitrate function
- *  Version 1.3
- *    Corrected receive overrun signaling
- *  Version 1.2
- *    Corrected functionality when NULL pointer is provided for one or both
- *    signal callbacks in Initialize function call
  *  Version 1.1
  *    Minor improvements and typo corrections
  *  Version 1.0
@@ -66,15 +52,10 @@
 #define CAN_CLOCK_TOLERANCE             (15U)   // 15/1024 approx. 1.5 %
 #endif
 
-// Interrupt Handler Prototypes
-void CAN_IRQHandler (void);
-
-extern ARM_DRIVER_CAN Driver_CAN1;
-extern ARM_DRIVER_CAN Driver_CAN2;
 
 // CAN Driver ******************************************************************
 
-#define ARM_CAN_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,6) // CAN driver version
+#define ARM_CAN_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,1) // CAN driver version
 
 // Driver Version
 static const ARM_DRIVER_VERSION can_driver_version = { ARM_CAN_API_VERSION, ARM_CAN_DRV_VERSION };
@@ -88,7 +69,6 @@ static const ARM_CAN_CAPABILITIES can_driver_capabilities = {
   1U,                   // Supports bus monitoring mode
   1U,                   // Supports internal loopback mode
   1U,                   // Supports external loopback mode
-  0U                    // Reserved
 };
 
 // Object Capabilities
@@ -101,8 +81,7 @@ static const ARM_CAN_OBJ_CAPABILITIES can_object_capabilities_rx = {
   1U,                   // Object supports exact identifier filtering
   1U,                   // Object supports range identifier filtering
   0U,                   // Object does not support mask identifier filtering
-  2U,                   // Object can buffer 2 messages
-  0U                    // Reserved
+  2U                    // Object can buffer 2 messages
 };
 static const ARM_CAN_OBJ_CAPABILITIES can_object_capabilities_tx = {
   1U,                   // Object supports transmission
@@ -113,8 +92,7 @@ static const ARM_CAN_OBJ_CAPABILITIES can_object_capabilities_tx = {
   0U,                   // Object does not support exact identifier filtering
   0U,                   // Object does not support range identifier filtering
   0U,                   // Object does not support mask identifier filtering
-  3U,                   // Object can buffer 3 message
-  0U                    // Reserved
+  3U                    // Object can buffer 3 message
 };
 
 
@@ -156,7 +134,7 @@ static void CANx_ResetRuntimeInfo (uint8_t x) {
   can_no_retransmission [x]    =  0U;
   can_loopback          [x]    =  0U;
   can_obj_cfg_msk       [x]    =  0U;
-  can_unit_state        [x]    =  0x10U;        // Initialize state to unexisting to force initial event
+  can_unit_state        [x]    =  0x10U;        // Initialize state to unexsisting to force initial event
   can_last_error_code   [x]    =  0U;
 }
 
@@ -181,7 +159,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
     switch (filter_type) {
       case CAN_FILTER_TYPE_EXACT_ID:                            // Exact
         // Entry in this section is 16 bits large
-        if (((LPC_CANAF->ENDofTable & CANAF_ENDofTable_ENDofTable_Msk) >= 0x800U) &&
+        if (((LPC_CANAF->ENDofTable & CANAF_ENDofTable_ENDofTable_Msk) >= 0x800U) && 
             ((LPC_CANAF->SFF_GRP_sa == 0U) || ((LPC_CANAF->SFF_GRP_sa != 0U) && ((LPC_CANAF_RAM->mask[(LPC_CANAF->SFF_GRP_sa/4U)-1U] & (1U << 12)) == 0U)))) {
           // If table is full and no disabled entries are available
           return ARM_DRIVER_ERROR;
@@ -207,7 +185,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
         }
 
         // Add new entry sorted into this section
-        entry = ((uint32_t)x << 13) | (id & 0x7FFU);
+        entry = (x << 13) | (id & 0x7FFU);
         i     =  LPC_CANAF->SFF_sa     / 4U;
         i_end = (LPC_CANAF->SFF_GRP_sa / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -258,7 +236,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
         LPC_CANAF_RAM->mask[i] = (1U << 29) | (1U << 28) | (0x7FFU << 16) | (1U << 13) | (1U << 12) | (0x7FFU);
 
         // Add new entry sorted into this section
-        entry = ((uint32_t)x << 29) | ((id & 0x7FFU) << 16) | ((uint32_t)x << 13) | (id_range_end & 0x7FFU);
+        entry = (x << 29) | ((id & 0x7FFU) << 16) | (x << 13) | (id_range_end & 0x7FFU);
         i     =  LPC_CANAF->SFF_GRP_sa / 4U;
         i_end = (LPC_CANAF->EFF_sa     / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -300,7 +278,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
         LPC_CANAF_RAM->mask[i] = (7U << 29) | (0x1FFFFFFFU);
 
         // Add new entry sorted into this section
-        entry = ((uint32_t)x << 29) | (id & 0x1FFFFFFFU);
+        entry = (x << 29) | (id & 0x1FFFFFFFU);
         i     =  LPC_CANAF->EFF_sa     / 4U;
         i_end = (LPC_CANAF->EFF_GRP_sa / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -333,7 +311,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
         LPC_CANAF_RAM->mask[(LPC_CANAF->ENDofTable/4U)-1U] = (7U << 29) | (0x1FFFFFFFU);
 
         // Add new entry sorted into this section
-        entry = ((uint32_t)x << 29) | (id & 0x1FFFFFFFU);
+        entry = (x << 29) | (id & 0x1FFFFFFFU);
         i     =  LPC_CANAF->EFF_GRP_sa / 4U;
         i_end = (LPC_CANAF->ENDofTable / 4U) - 2U;
         for (; i <= i_end; i += 2U) {
@@ -347,7 +325,7 @@ static int32_t CANx_AddFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint32_
             }
             // Insert new entry
             LPC_CANAF_RAM->mask[i   ] = entry;
-            LPC_CANAF_RAM->mask[i+1U] = ((uint32_t)x << 29) | (id_range_end & 0x1FFFFFFFU);
+            LPC_CANAF_RAM->mask[i+1U] = (x << 29) | (id_range_end & 0x1FFFFFFFU);
             break;
           }
         }
@@ -385,7 +363,7 @@ static int32_t CANx_RemoveFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint
         }
 
         // Find entry to be removed
-        entry = ((uint32_t)x << 13) | (id & 0x7FFU);
+        entry = (x << 13) | (id & 0x7FFU);
         i     =  LPC_CANAF->SFF_sa     / 4U;
         i_end = (LPC_CANAF->SFF_GRP_sa / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -442,7 +420,7 @@ static int32_t CANx_RemoveFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint
         }
 
         // Find entry to be removed
-        entry = ((uint32_t)x << 29) | ((id & 0x7FFU) << 16) | ((uint32_t)x << 13) | (id_range_end & 0x7FFU);
+        entry = (x << 29) | ((id & 0x7FFU) << 16) | (x << 13) | (id_range_end & 0x7FFU);
         i     =  LPC_CANAF->SFF_GRP_sa / 4U;
         i_end = (LPC_CANAF->EFF_sa     / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -480,7 +458,7 @@ static int32_t CANx_RemoveFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint
         }
 
         // Find entry to be removed
-        entry = ((uint32_t)x << 29) | (id & 0x1FFFFFFFU);
+        entry = (x << 29) | (id & 0x1FFFFFFFU);
         i     =  LPC_CANAF->EFF_sa     / 4U;
         i_end = (LPC_CANAF->EFF_GRP_sa / 4U) - 1U;
         for (; i <= i_end; i++) {
@@ -514,12 +492,12 @@ static int32_t CANx_RemoveFilter (CAN_FILTER_TYPE filter_type, uint32_t id, uint
         }
 
         // Find entry to be removed
-        entry = ((uint32_t)x << 29) | (id & 0x1FFFFFFFU);
+        entry = (x << 29) | (id & 0x1FFFFFFFU);
         i     =  LPC_CANAF->EFF_GRP_sa / 4U;
         i_end = (LPC_CANAF->ENDofTable / 4U) - 2U;
         for (; i <= i_end; i += 2U) {
           if ((LPC_CANAF_RAM->mask[i] == entry) &&              // If this is entry to be removed
-              (LPC_CANAF_RAM->mask[i+1U] == (((uint32_t)x << 29) | (id_range_end & 0x1FFFFFFFU)))) {
+              (LPC_CANAF_RAM->mask[i+1U] == ((x << 29) | (id_range_end & 0x1FFFFFFFU)))) {
             // Move all remaining entries in this section 64 bits towards start of table
             for (; i < i_end; i += 2U) {
               LPC_CANAF_RAM->mask[i   ] = LPC_CANAF_RAM->mask[i+2U];
@@ -689,18 +667,21 @@ static int32_t CANx_PowerControl (ARM_POWER_STATE state, uint8_t x) {
   LPC_CAN_TypeDef *ptr_CAN;
 
   if (x >= CAN_CTRL_NUM) { return ARM_DRIVER_ERROR; }
-  if ((state != ARM_POWER_OFF)  &&
-      (state != ARM_POWER_FULL) &&
-      (state != ARM_POWER_LOW)) {
-    return ARM_DRIVER_ERROR_PARAMETER;
-  }
 
   ptr_CAN = ptr_CANx[x];
 
   switch (state) {
     case ARM_POWER_OFF:
       can_driver_powered[x] = 0U;
-      NVIC_DisableIRQ (CAN_IRQn);
+#if (CAN_CTRL_NUM == 2U)
+      if ((can_driver_powered[0] == 0U) && (can_driver_powered[1] == 0U)) {
+        NVIC_DisableIRQ (CAN_IRQn);
+      }
+#else
+      if (can_driver_powered[0] == 0U) {
+        NVIC_DisableIRQ (CAN_IRQn);
+      }
+#endif
 
       LPC_SC->PCONP     |=  1U << (x + 13U);    // Enable power to CANx block
       ptr_CAN->IER       =  0U;                 // Disable interrupts
@@ -738,7 +719,7 @@ static int32_t CANx_PowerControl (ARM_POWER_STATE state, uint8_t x) {
       NVIC_EnableIRQ       (CAN_IRQn);
       break;
 
-    case ARM_POWER_LOW:
+    default:
       return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
 
@@ -757,7 +738,7 @@ static int32_t CAN2_PowerControl (ARM_POWER_STATE state) { return CANx_PowerCont
   \param[in]   x      Controller number (0..1)
   \return      base clock frequency
 */
-static uint32_t CANx_GetClock (uint8_t x) {
+uint32_t CANx_GetClock (uint8_t x) {
 
   if (x >= CAN_CTRL_NUM) { return 0U; }
 
@@ -782,7 +763,7 @@ static uint32_t CANx_GetClock (uint8_t x) {
       case 0U:
         return (SystemCoreClock / 4U);
       case 1U:
-        return (SystemCoreClock);
+        return (SystemCoreClock);     
       case 2U:
         return (SystemCoreClock / 2U);
       case 3U:
@@ -841,9 +822,9 @@ static int32_t CANx_SetBitrate (ARM_CAN_BITRATE_SELECT select, uint32_t bitrate,
   pclk   = CANx_GetClock(x);          if (pclk == 0U)  { return ARM_DRIVER_ERROR;        }
   brp    = pclk / (tq_num * bitrate); if (brp > 1024U) { return ARM_CAN_INVALID_BITRATE; }
   if (pclk > (brp * tq_num * bitrate)) {
-    if ((((pclk - (brp * tq_num * bitrate)) * 1024U) / pclk) > CAN_CLOCK_TOLERANCE) { return ARM_CAN_INVALID_BITRATE; }
+    if (((pclk - (brp * tq_num * bitrate)) * 1024U) > CAN_CLOCK_TOLERANCE) { return ARM_CAN_INVALID_BITRATE; }
   } else if (pclk < (brp * tq_num * bitrate)) {
-    if (((((brp * tq_num * bitrate) - pclk) * 1024U) / pclk) > CAN_CLOCK_TOLERANCE) { return ARM_CAN_INVALID_BITRATE; }
+    if ((((brp * tq_num * bitrate) - pclk) * 1024U) > CAN_CLOCK_TOLERANCE) { return ARM_CAN_INVALID_BITRATE; }
   }
 
   mod = ptr_CAN->MOD;                   // Store current mode
@@ -875,14 +856,12 @@ static int32_t CAN2_SetBitrate (ARM_CAN_BITRATE_SELECT select, uint32_t bitrate,
 */
 static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
   LPC_CAN_TypeDef *ptr_CAN;
-  uint32_t         event;
 
   if (x >= CAN_CTRL_NUM)           { return ARM_DRIVER_ERROR; }
   if (can_driver_powered[x] == 0U) { return ARM_DRIVER_ERROR; }
 
   ptr_CAN = ptr_CANx[x];
 
-  event = 0U;
   switch (mode) {
     case ARM_CAN_MODE_INITIALIZATION:
       ptr_CAN->MOD    =  CAN_MOD_RM;            // Enter reset mode
@@ -890,7 +869,7 @@ static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
       LPC_CANAF->AFMR =  CANAF_AFMR_AccBP | CANAF_AFMR_AccOff;
       if (can_unit_state[x] != ARM_CAN_UNIT_STATE_INACTIVE) {
         can_unit_state[x]    = ARM_CAN_UNIT_STATE_INACTIVE;
-        event                = ARM_CAN_EVENT_UNIT_BUS_OFF;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_BUS_OFF);
       }
       break;
     case ARM_CAN_MODE_NORMAL:
@@ -901,7 +880,7 @@ static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
       can_loopback[x] =  0U;                    // Loopback not active
       if (can_unit_state[x] != ARM_CAN_UNIT_STATE_ACTIVE) {
         can_unit_state[x]    = ARM_CAN_UNIT_STATE_ACTIVE;
-        event                = ARM_CAN_EVENT_UNIT_ACTIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE);
       }
       break;
     case ARM_CAN_MODE_RESTRICTED:
@@ -914,7 +893,7 @@ static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
       can_loopback[x] =  0U;                    // Loopback not active
       if (can_unit_state[x] == ARM_CAN_UNIT_STATE_ACTIVE) {
         can_unit_state[x]    = ARM_CAN_UNIT_STATE_PASSIVE;
-        event                = ARM_CAN_EVENT_UNIT_PASSIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_PASSIVE);
       }
       break;
     case ARM_CAN_MODE_LOOPBACK_INTERNAL:
@@ -925,7 +904,7 @@ static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
       can_loopback[x] =  1U;                    // Loopback active
       if (can_unit_state[x] == ARM_CAN_UNIT_STATE_ACTIVE) {
         can_unit_state[x]    = ARM_CAN_UNIT_STATE_PASSIVE;
-        event                = ARM_CAN_EVENT_UNIT_PASSIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_PASSIVE);
       }
       break;
     case ARM_CAN_MODE_LOOPBACK_EXTERNAL:
@@ -936,11 +915,12 @@ static int32_t CANx_SetMode (ARM_CAN_MODE mode, uint8_t x) {
       can_loopback[x] =  1U;                    // Loopback active
       if (can_unit_state[x] == ARM_CAN_UNIT_STATE_PASSIVE) {
         can_unit_state[x]    = ARM_CAN_UNIT_STATE_ACTIVE;
-        event                = ARM_CAN_EVENT_UNIT_ACTIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE);
       }
       break;
+    default:
+      return ARM_DRIVER_ERROR_PARAMETER;
   }
-  if ((CAN_SignalUnitEvent[x] != NULL) && (event != 0U)) { CAN_SignalUnitEvent[x](event); }
 
   return ARM_DRIVER_OK;
 }
@@ -958,7 +938,7 @@ static int32_t CAN2_SetMode (ARM_CAN_MODE mode) { return CANx_SetMode (mode, 1U)
   \param[in]   x        Controller number (0..1)
   \return      ARM_CAN_OBJ_CAPABILITIES
 */
-static ARM_CAN_OBJ_CAPABILITIES CANx_ObjectGetCapabilities (uint32_t obj_idx, uint8_t x) {
+ARM_CAN_OBJ_CAPABILITIES CANx_ObjectGetCapabilities (uint32_t obj_idx, uint8_t x) {
   ARM_CAN_OBJ_CAPABILITIES obj_cap_null;
 
   if ((x >= CAN_CTRL_NUM) || (obj_idx > 1U)) {
@@ -973,10 +953,10 @@ static ARM_CAN_OBJ_CAPABILITIES CANx_ObjectGetCapabilities (uint32_t obj_idx, ui
   }
 }
 #if (RTE_CAN_CAN1 == 1U)
-static ARM_CAN_OBJ_CAPABILITIES CAN1_ObjectGetCapabilities (uint32_t obj_idx) { return CANx_ObjectGetCapabilities (obj_idx, 0U); }
+ARM_CAN_OBJ_CAPABILITIES CAN1_ObjectGetCapabilities (uint32_t obj_idx) { return CANx_ObjectGetCapabilities (obj_idx, 0U); }
 #endif
 #if (RTE_CAN_CAN2 == 1U)
-static ARM_CAN_OBJ_CAPABILITIES CAN2_ObjectGetCapabilities (uint32_t obj_idx) { return CANx_ObjectGetCapabilities (obj_idx, 1U); }
+ARM_CAN_OBJ_CAPABILITIES CAN2_ObjectGetCapabilities (uint32_t obj_idx) { return CANx_ObjectGetCapabilities (obj_idx, 1U); }
 #endif
 
 /**
@@ -1021,6 +1001,7 @@ static int32_t CANx_ObjectSetFilter (uint32_t obj_idx, ARM_CAN_FILTER_OPERATION 
       break;
     case ARM_CAN_FILTER_ID_MASKABLE_ADD:
     case ARM_CAN_FILTER_ID_MASKABLE_REMOVE:
+    default:
       status = ARM_DRIVER_ERROR_UNSUPPORTED;
       break;
   }
@@ -1070,6 +1051,8 @@ static int32_t CANx_ObjectConfigure (uint32_t obj_idx, ARM_CAN_OBJ_CONFIG obj_cf
       if (obj_idx != 0U) { return ARM_DRIVER_ERROR_PARAMETER; }
       can_obj_cfg_msk[x] = 1U;
       break;
+    default:
+      return ARM_DRIVER_ERROR;
   }
 
   return ARM_DRIVER_OK;
@@ -1134,8 +1117,8 @@ static int32_t CANx_MessageSend (uint32_t obj_idx, ARM_CAN_MSG_INFO *msg_info, c
       ptr_CAN->TFI1 = tfi;
       ptr_CAN->TID1 = tid;
       if (data != NULL) {
-        ptr_CAN->TDA1 = (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
-        ptr_CAN->TDB1 = (uint32_t)(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24));
+        ptr_CAN->TDA1 = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+        ptr_CAN->TDB1 = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
       }
       ptr_CAN->CMR = CAN_CMR_STB1 | cmr;
       break;
@@ -1143,8 +1126,8 @@ static int32_t CANx_MessageSend (uint32_t obj_idx, ARM_CAN_MSG_INFO *msg_info, c
       ptr_CAN->TFI2 = tfi;
       ptr_CAN->TID2 = tid;
       if (data != NULL) {
-        ptr_CAN->TDA2 = (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
-        ptr_CAN->TDB2 = (uint32_t)(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24));
+        ptr_CAN->TDA2 = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+        ptr_CAN->TDB2 = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
       }
       ptr_CAN->CMR = CAN_CMR_STB2 | cmr;
       break;
@@ -1152,8 +1135,8 @@ static int32_t CANx_MessageSend (uint32_t obj_idx, ARM_CAN_MSG_INFO *msg_info, c
       ptr_CAN->TFI3 = tfi;
       ptr_CAN->TID3 = tid;
       if (data != NULL) {
-        ptr_CAN->TDA3 = (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
-        ptr_CAN->TDB3 = (uint32_t)(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24));
+        ptr_CAN->TDA3 = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+        ptr_CAN->TDB3 = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
       }
       ptr_CAN->CMR = CAN_CMR_STB3 | cmr;
       break;
@@ -1210,12 +1193,12 @@ static int32_t CANx_MessageRead (uint32_t obj_idx, ARM_CAN_MSG_INFO *msg_info, u
   if (size > 0U){
     data_rx[0] = ptr_CAN->RDA;
     data_rx[1] = ptr_CAN->RDB;
-    memset(data, 0, size);
-    size = (size > msg_info->dlc) ? msg_info->dlc : size;
     memcpy(data, (uint8_t *)(&data_rx[0]), size);
   }
 
-  return ((int32_t)(size));
+  ptr_CAN->CMR = CAN_CMR_RRB | CAN_CMR_CDO;     // Release Receive Buffer and clear Data Overrun if active
+
+  return ((int32_t)size);
 }
 #if (RTE_CAN_CAN1 == 1U)
 static int32_t CAN1_MessageRead (uint32_t obj_idx, ARM_CAN_MSG_INFO *msg_info, uint8_t *data, uint8_t size) { return CANx_MessageRead (obj_idx, msg_info, data, size, 0U); }
@@ -1287,7 +1270,7 @@ static ARM_CAN_STATUS CANx_GetStatus (uint8_t x) {
   uint32_t       gsr;
 
   if ((x >= CAN_CTRL_NUM) || (can_driver_powered[x] == 0U)) {
-    memset((void *)&can_status, 0U, sizeof(ARM_CAN_STATUS));
+    memset(&can_status, 0U, sizeof(ARM_CAN_STATUS));
     return can_status;
   }
 
@@ -1326,77 +1309,77 @@ void CAN_IRQHandler (void) {
 
 #if ((RTE_CAN_CAN1 == 1U) && (RTE_CAN_CAN2 == 1U))
   for (x = 0U; x < 2U; x++) {
-    if (can_driver_powered[x] == 0U) { continue; }
 #endif
 
   ptr_CAN = ptr_CANx[x];
 
-  icr = ptr_CAN->ICR;
-  gsr = ptr_CAN->GSR;
-  if ((icr & CAN_ICR_DOI) != 0U) {    // If Data Overrun Interrupt is active
-    if (CAN_SignalObjectEvent[x] != NULL) { CAN_SignalObjectEvent[x](0U, ARM_CAN_EVENT_RECEIVE | ARM_CAN_EVENT_RECEIVE_OVERRUN); }
-    ptr_CAN->CMR = CAN_CMR_CDO;       // Clear Data Overrun if active
-  } else if ((icr&CAN_ICR_RI)!=0U) {  // If Receive Interrupt is active
-    if (CAN_SignalObjectEvent[x] != NULL) { CAN_SignalObjectEvent[x](0U, ARM_CAN_EVENT_RECEIVE); }
-    ptr_CAN->CMR = CAN_CMR_RRB;       // Release Receive Buffer
-  }
-  if ((icr & CAN_ICR_TI1) != 0U) {    // If Transmit Interrupt 1 is active
-    can_obj_tx_alloc[x][0] = 0U;
-    if (CAN_SignalObjectEvent[x] != NULL) { CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE); }
-  }
-  if ((icr & CAN_ICR_TI2) != 0U) {    // If Transmit Interrupt 2 is active
-    can_obj_tx_alloc[x][1] = 0U;
-    if (CAN_SignalObjectEvent[x] != NULL) { CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE); }
-  }
-  if ((icr & CAN_ICR_TI3) != 0U) {    // If Transmit Interrupt 3 is active
-    can_obj_tx_alloc[x][2] = 0U;
-    if (CAN_SignalObjectEvent[x] != NULL) { CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE); }
-  }
-  if ((icr & CAN_ICR_EI) != 0U) {     // If Error Warning Interrupt is active
-    if ((gsr & CAN_GSR_ES) != 0U) {
-      if (CAN_SignalUnitEvent[x] != NULL) { CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_WARNING); }
+  if (can_driver_powered[x] != 0U) {
+    icr = ptr_CAN->ICR;
+    gsr = ptr_CAN->GSR;
+    if ((icr & CAN_ICR_RI) != 0U) {     // If Receive Interrupt is active
+      CAN_SignalObjectEvent[x](0U, ARM_CAN_EVENT_RECEIVE);
     }
-  }
-  if ((icr & CAN_ICR_EPI) != 0U) {    // If Error Passive Interrupt is active
-    if ((((gsr & CAN_GSR_RXERR_Msk) >> CAN_GSR_RXERR_Pos) > 127U) ||
-        (((gsr & CAN_GSR_TXERR_Msk) >> CAN_GSR_TXERR_Pos) > 127U)) {
-      can_unit_state[x] = ARM_CAN_UNIT_STATE_PASSIVE;
-      if (CAN_SignalUnitEvent[x] != NULL) { CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_PASSIVE); }
-    } else {
-      can_unit_state[x] = ARM_CAN_UNIT_STATE_ACTIVE;
-      if (CAN_SignalUnitEvent[x] != NULL) { CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE); }
+    if ((icr & CAN_ICR_TI1) != 0U) {    // If Transmit Interrupt 1 is active
+      can_obj_tx_alloc[x][0] = 0U;
+      CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE);
     }
-  }
-  if ((icr & CAN_ICR_BEI) != 0U) {    // If Bus Error Interrupt is active
-    switch ((icr & CAN_ICR_ERRC1_0_Msk) >> CAN_ICR_ERRC1_0_Pos) {
-      case 0U:
-        can_last_error_code[x] = ARM_CAN_LEC_BIT_ERROR;
-        break;
-      case 1U:
-        can_last_error_code[x] = ARM_CAN_LEC_FORM_ERROR;
-        break;
-      case 2U:
-        can_last_error_code[x] = ARM_CAN_LEC_STUFF_ERROR;
-        break;
-      case 3U:
-        switch ((icr & CAN_ICR_ERRBIT_Msk) >> CAN_ICR_ERRBIT_Pos) {
-          case 8U:
-            can_last_error_code[x] = ARM_CAN_LEC_CRC_ERROR;
-            break;
-          case 25U:
-            can_last_error_code[x] = ARM_CAN_LEC_ACK_ERROR;
-            break;
-          default:
-            break;
-        }
-        break;
+    if ((icr & CAN_ICR_EI) != 0U) {     // If Error Warning Interrupt is active
+      if ((gsr & CAN_GSR_ES) != 0U) {
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_WARNING);
+      }
     }
-    if ((gsr & CAN_GSR_BS) != 0U) {
-      can_unit_state[x] = ARM_CAN_UNIT_STATE_INACTIVE;
-      if (CAN_SignalUnitEvent[x] != NULL) { CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_BUS_OFF); }
-    } else if (can_unit_state[x] == ARM_CAN_UNIT_STATE_INACTIVE) {
-      can_unit_state[x] = ARM_CAN_UNIT_STATE_ACTIVE;
-      if (CAN_SignalUnitEvent[x] != NULL) { CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE); }
+    if ((icr & CAN_ICR_DOI) != 0U) {    // If Data Overrun Interrupt is active
+      CAN_SignalObjectEvent[x](0U, ARM_CAN_EVENT_RECEIVE_OVERRUN);
+    }
+    if ((icr & CAN_ICR_EPI) != 0U) {    // If Error Passive Interrupt is active
+      if ((((gsr & CAN_GSR_RXERR_Msk) >> CAN_GSR_RXERR_Pos) > 127U) ||
+          (((gsr & CAN_GSR_TXERR_Msk) >> CAN_GSR_TXERR_Pos) > 127U)) {
+        can_unit_state[x] = ARM_CAN_UNIT_STATE_PASSIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_PASSIVE);
+      } else {
+        can_unit_state[x] = ARM_CAN_UNIT_STATE_ACTIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE);
+      }
+    }
+    if ((icr & CAN_ICR_BEI) != 0U) {    // If Bus Error Interrupt is active
+      switch ((icr & CAN_ICR_ERRC1_0_Msk) >> CAN_ICR_ERRC1_0_Pos) {
+        case 0U:
+          can_last_error_code[x] = ARM_CAN_LEC_BIT_ERROR;
+          break;
+        case 1U:
+          can_last_error_code[x] = ARM_CAN_LEC_FORM_ERROR;
+          break;
+        case 2U:
+          can_last_error_code[x] = ARM_CAN_LEC_STUFF_ERROR;
+          break;
+        case 3U:
+          switch ((icr & CAN_ICR_ERRBIT_Msk) >> CAN_ICR_ERRBIT_Pos) {
+            case 8U:
+              can_last_error_code[x] = ARM_CAN_LEC_CRC_ERROR;
+              break;
+            case 25U:
+              can_last_error_code[x] = ARM_CAN_LEC_ACK_ERROR;
+              break;
+            default:
+              break;
+          }
+          break;
+      }
+      if ((gsr & CAN_GSR_BS) != 0U) {
+        can_unit_state[x] = ARM_CAN_UNIT_STATE_INACTIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_BUS_OFF);
+      } else if (can_unit_state[x] == ARM_CAN_UNIT_STATE_INACTIVE) {
+        can_unit_state[x] = ARM_CAN_UNIT_STATE_ACTIVE;
+        CAN_SignalUnitEvent[x](ARM_CAN_EVENT_UNIT_ACTIVE);
+      }
+    }
+    if ((icr & CAN_ICR_TI2) != 0U) {    // If Transmit Interrupt 2 is active
+      can_obj_tx_alloc[x][1] = 0U;
+      CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE);
+    }
+    if ((icr & CAN_ICR_TI3) != 0U) {    // If Transmit Interrupt 3 is active
+      can_obj_tx_alloc[x][2] = 0U;
+      CAN_SignalObjectEvent[x](1U, ARM_CAN_EVENT_SEND_COMPLETE);
     }
   }
 #if ((RTE_CAN_CAN1 == 1U) && (RTE_CAN_CAN2 == 1U))

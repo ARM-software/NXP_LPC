@@ -1,6 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
- * rights reserved.
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        10. Januar 2020
- * $Revision:    V2.13
+ * $Date:        02. March 2016
+ * $Revision:    V2.9
  *
  * Driver:       Driver_ETH_MAC0
  * Configured:   via RTE_Device.h configuration file
@@ -33,19 +31,11 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
- *  Version 2.13
- *    Removed minor compiler warnings
- *  Version 2.12
- *    Added support for ARM Compiler 6
- *  Version 2.11
-      - Corrected timeout implementation for RTOS2
- *  Version 2.10
- *    - Added support for CMSIS-RTOS2
  *  Version 2.9
  *    Corrected PowerControl function for conditional Power full (driver must be initialized)
  *  Version 2.8
- *    - Fixed PHY device addressing when using software controlled MDI
- *    - Corrected return value of the ReadFrame function
+ *    Fixed PHY device addressing when using software controlled MDI
+ *    Corrected return value of the ReadFrame function
  *  Version 2.7
  *    - Updated initialization, uninitialization and power procedures
  *  Version 2.6
@@ -69,22 +59,18 @@
  *    - Initial release
  */
 
+
 #include "EMAC_LPC17xx.h"
 
-extern ARM_DRIVER_ETH_MAC Driver_ETH_MAC0;
-
-#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,13) /* driver version */
-
-/* Interrupt Handler Prototype */
-void ENET_IRQHandler (void);
+#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,9) /* driver version */
 
 /* Timeouts */
-#define PHY_TIMEOUT         500U        /* PHY Register access timeout in us  */
+#define PHY_TIMEOUT         500         /* PHY Register access timeout in us  */
 
 /* EMAC Memory Buffer configuration for 16K Ethernet RAM */
-#define NUM_RX_BUF          4U          /* 0x1800 for Rx (4*1536=6.0K)        */
-#define NUM_TX_BUF          3U          /* 0x1200 for Tx (3*1536=4.6K)        */
-#define ETH_BUF_SIZE        1536U       /* ETH Receive/Transmit buffer size   */
+#define NUM_RX_BUF          4           /* 0x1800 for Rx (4*1536=6.0K)        */
+#define NUM_TX_BUF          3           /* 0x1200 for Tx (3*1536=4.6K)        */
+#define ETH_BUF_SIZE        1536        /* ETH Receive/Transmit buffer size   */
 
 /* Ethernet Pin definitions */
 static PIN eth_pins[] = {
@@ -98,9 +84,9 @@ static PIN eth_pins[] = {
   { RTE_ENET_RMII_REF_CLK_PORT,RTE_ENET_RMII_REF_CLK_PIN },
   { RTE_ENET_RMII_RXD0_PORT,   RTE_ENET_RMII_RXD0_PIN    },
   { RTE_ENET_RMII_RXD1_PORT,   RTE_ENET_RMII_RXD1_PIN    },
-  { RTE_ENET_RMII_RX_ER_PORT,  RTE_ENET_RMII_RX_ER_PIN   },
+  { RTE_ENET_RMII_RX_ER_PORT,  RTE_ENET_RMII_RX_ER_PIN   }
 #endif
-#ifdef RTE_ENET_MII
+#if (RTE_ENET_MII)
   { RTE_ENET_MII_TXD0_PORT,    RTE_ENET_MII_TXD0_PIN     },
   { RTE_ENET_MII_TXD1_PORT,    RTE_ENET_MII_TXD1_PIN     },
   { RTE_ENET_MII_TXD2_PORT,    RTE_ENET_MII_TXD2_PIN     },
@@ -122,8 +108,8 @@ static PIN eth_pins[] = {
 #endif
 };
 
-#define MDIO_MASK           0x00000200U
-#define MDC_MASK            0x00000100U
+#define MDIO_MASK           0x00000200
+#define MDC_MASK            0x00000100
 
 
 #define EMAC_MDC_PIN        (&eth_pins[0])
@@ -166,28 +152,27 @@ static const ARM_DRIVER_VERSION DriverVersion = {
 
 /* Driver Capabilities */
 static const ARM_ETH_MAC_CAPABILITIES DriverCapabilities = {
-  0U,                               /* checksum_offload_rx_ip4  */
-  0U,                               /* checksum_offload_rx_ip6  */
-  0U,                               /* checksum_offload_rx_udp  */
-  0U,                               /* checksum_offload_rx_tcp  */
-  0U,                               /* checksum_offload_rx_icmp */
-  0U,                               /* checksum_offload_tx_ip4  */
-  0U,                               /* checksum_offload_tx_ip6  */
-  0U,                               /* checksum_offload_tx_udp  */
-  0U,                               /* checksum_offload_tx_tcp  */
-  0U,                               /* checksum_offload_tx_icmp */
+  0,                                /* checksum_offload_rx_ip4  */
+  0,                                /* checksum_offload_rx_ip6  */
+  0,                                /* checksum_offload_rx_udp  */
+  0,                                /* checksum_offload_rx_tcp  */
+  0,                                /* checksum_offload_rx_icmp */
+  0,                                /* checksum_offload_tx_ip4  */
+  0,                                /* checksum_offload_tx_ip6  */
+  0,                                /* checksum_offload_tx_udp  */
+  0,                                /* checksum_offload_tx_tcp  */
+  0,                                /* checksum_offload_tx_icmp */
   ARM_ETH_INTERFACE_RMII,           /* media_interface          */
-  0U,                               /* mac_address              */
-  1U,                               /* event_rx_frame           */
-  1U,                               /* event_tx_frame           */
-  1U,                               /* event_wakeup             */
-  0U,                               /* precision_timer          */
-  0U                                /* reserved                 */
+  0,                                /* mac_address              */
+  1,                                /* event_rx_frame           */
+  1,                                /* event_tx_frame           */
+  1,                                /* event_wakeup             */
+  0                                 /* precision_timer          */
 };
 
 /* EMAC local DMA Descriptors. */
 static            RX_Desc Rx_Desc[NUM_RX_BUF];
-static __ALIGNED(8) RX_Stat Rx_Stat[NUM_RX_BUF]; /* Must be 8-Byte aligned   */
+static __align(8) RX_Stat Rx_Stat[NUM_RX_BUF]; /* Must be 8-Byte aligned   */
 static            TX_Desc Tx_Desc[NUM_TX_BUF];
 static            TX_Stat Tx_Stat[NUM_TX_BUF];
 
@@ -200,7 +185,7 @@ static EMAC_CTRL  emac_control = { 0 };
 #define emac     (emac_control)
 
 typedef void (*IAP)(uint32_t *cmd, uint32_t *res);
-static IAP iap_entry = (IAP)0x1FFF1FF1;
+IAP iap_entry = (IAP)0x1FFF1FF1;
 
 /* Local functions */
 static void init_rx_desc (void);
@@ -216,10 +201,10 @@ static uint32_t crc32_data (const uint8_t *data, uint32_t len);
   \return      none.
 */
 static void output_MDIO (uint32_t val, uint32_t num) {
-  for (val <<= (32U - num); num; val <<= 1, num--) {
-    GPIO_PinWrite (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, ((val & 0x80000000U) ? 1U : 0U));
-    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 1U);
-    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 0U);
+  for (val <<= (32 - num); num; val <<= 1, num--) {
+    GPIO_PinWrite (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, ((val & 0x80000000) ? 1 : 0));
+    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 1);
+    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 0);
   }
 }
 
@@ -230,8 +215,8 @@ static void output_MDIO (uint32_t val, uint32_t num) {
 */
 static void turnaround_MDIO (void) {
   GPIO_SetDir   (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, GPIO_DIR_INPUT);
-  GPIO_PinWrite (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum, 1U);
-  GPIO_PinWrite (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum, 0U);
+  GPIO_PinWrite (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum, 1);
+  GPIO_PinWrite (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum, 0);
 }
 
 /**
@@ -240,14 +225,14 @@ static void turnaround_MDIO (void) {
   \return      none.
 */
 static uint32_t input_MDIO (void) {
-  uint32_t i,val = 0U;
+  uint32_t i,val = 0;
 
-  for (i = 0U; i < 16U; i++) {
+  for (i = 0; i < 16; i++) {
     val <<= 1;
-    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 1U);
-    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 0U);
+    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 1);
+    GPIO_PinWrite (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum, 0);
     if (GPIO_PortRead(EMAC_MDIO_PIN->Portnum) & MDIO_MASK) {
-      val |= 1U;
+      val |= 1;
     }
   }
   return (val);
@@ -261,20 +246,20 @@ static uint32_t input_MDIO (void) {
 static void init_rx_desc (void) {
   uint32_t i;
 
-  for (i = 0U; i < NUM_RX_BUF; i++) {
+  for (i = 0; i < NUM_RX_BUF; i++) {
     Rx_Desc[i].Packet  = (uint8_t *)&rx_buf[i];
     Rx_Desc[i].Ctrl    = RCTRL_INT | (ETH_BUF_SIZE-1);
-    Rx_Stat[i].Info    = 0U;
-    Rx_Stat[i].HashCRC = 0U;
+    Rx_Stat[i].Info    = 0;
+    Rx_Stat[i].HashCRC = 0;
   }
 
   /* Set EMAC Receive Descriptor Registers */
   LPC_EMAC->RxDescriptor       = (uint32_t)&Rx_Desc[0];
   LPC_EMAC->RxStatus           = (uint32_t)&Rx_Stat[0];
-  LPC_EMAC->RxDescriptorNumber = NUM_RX_BUF-1U;
+  LPC_EMAC->RxDescriptorNumber = NUM_RX_BUF-1;
 
   /* Rx Descriptors Point to 0 */
-  LPC_EMAC->RxConsumeIndex  = 0U;
+  LPC_EMAC->RxConsumeIndex  = 0;
 }
 
 /**
@@ -285,10 +270,10 @@ static void init_rx_desc (void) {
 static void init_tx_desc (void) {
   uint32_t i;
 
-  for (i = 0U; i < NUM_TX_BUF; i++) {
+  for (i = 0; i < NUM_TX_BUF; i++) {
     Tx_Desc[i].Packet = (uint8_t *)&tx_buf[i];
-    Tx_Desc[i].Ctrl   = 0U;
-    Tx_Stat[i].Info   = 0U;
+    Tx_Desc[i].Ctrl   = 0;
+    Tx_Stat[i].Info   = 0;
   }
 
   /* Set EMAC Transmit Descriptor Registers */
@@ -297,7 +282,7 @@ static void init_tx_desc (void) {
   LPC_EMAC->TxDescriptorNumber = NUM_TX_BUF-1;
 
   /* Tx Descriptors Point to 0 */
-  LPC_EMAC->TxProduceIndex  = 0U;
+  LPC_EMAC->TxProduceIndex  = 0;
 }
 
 /**
@@ -311,10 +296,10 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
   uint32_t n;
 
   crc32 ^= __RBIT(val);
-  for (n = 8U; n; n--) {
-    if (crc32 & 0x80000000U) {
+  for (n = 8; n; n--) {
+    if (crc32 & 0x80000000) {
       crc32 <<= 1;
-      crc32  ^= 0x04C11DB7U;
+      crc32  ^= 0x04C11DB7;
     } else {
       crc32 <<= 1;
     }
@@ -332,7 +317,7 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
 static uint32_t crc32_data (const uint8_t *data, uint32_t len) {
   uint32_t crc;
 
-  for (crc = 0xFFFFFFFFU; len; len--) {
+  for (crc = 0xFFFFFFFF; len; len--) {
     crc = crc32_8bit_rev (crc, *data++);
   }
   return (crc);
@@ -377,7 +362,7 @@ static int32_t Initialize (ARM_ETH_MAC_SignalEvent_t cb_event) {
   /* Read device ID with IAP */
   pb[0] = 54;
   iap_entry (&pb[0], &pb[0]);
-  if ((pb[1] >> 24) == 0x25U) {
+  if ((pb[1] >> 24) == 0x25) {
     /* Use software RMII management routines */
     dev_175x = true;
   }
@@ -386,35 +371,35 @@ static int32_t Initialize (ARM_ETH_MAC_SignalEvent_t cb_event) {
   }
 #if defined (LPC175x_6x)
   /* Enable Ethernet Pins. */
-  PIN_Configure (EMAC_TXD0_PIN->Portnum,   EMAC_TXD0_PIN->Pinnum,    RTE_ENET_RMII_TXD0_FUNC,   0U,   0U);
-  PIN_Configure (EMAC_TXD1_PIN->Portnum,   EMAC_TXD1_PIN->Pinnum,    RTE_ENET_RMII_TXD1_FUNC,   0U,   0U);
-  PIN_Configure (EMAC_TX_EN_PIN->Portnum,  EMAC_TX_EN_PIN->Pinnum,   RTE_ENET_RMII_TX_EN_FUNC,  0U,   0U);
-  PIN_Configure (EMAC_CRS_PIN->Portnum,    EMAC_CRS_PIN->Pinnum,     RTE_ENET_RMII_CRS_FUNC,    0U,   0U);
-  PIN_Configure (EMAC_REF_PIN->Portnum,    EMAC_REF_PIN->Pinnum,     RTE_ENET_RMII_REF_CLK_FUNC,0U,   0U);
-  PIN_Configure (EMAC_RXD0_PIN->Portnum,   EMAC_RXD0_PIN->Pinnum,    RTE_ENET_RMII_RXD0_FUNC,   0U,   0U);
-  PIN_Configure (EMAC_RXD1_PIN->Portnum,   EMAC_RXD1_PIN->Pinnum,    RTE_ENET_RMII_RXD1_FUNC,   0U,   0U);
-  PIN_Configure (EMAC_RX_ER_PIN->Portnum,  EMAC_RX_ER_PIN->Pinnum,   RTE_ENET_RMII_RX_ER_FUNC,  0U,   0U);
+  PIN_Configure (EMAC_TXD0_PIN->Portnum,   EMAC_TXD0_PIN->Pinnum,    RTE_ENET_RMII_TXD0_FUNC,   0,   0);
+  PIN_Configure (EMAC_TXD1_PIN->Portnum,   EMAC_TXD1_PIN->Pinnum,    RTE_ENET_RMII_TXD1_FUNC,   0,   0);
+  PIN_Configure (EMAC_TX_EN_PIN->Portnum,  EMAC_TX_EN_PIN->Pinnum,   RTE_ENET_RMII_TX_EN_FUNC,  0,   0);
+  PIN_Configure (EMAC_CRS_PIN->Portnum,    EMAC_CRS_PIN->Pinnum,     RTE_ENET_RMII_CRS_FUNC,    0,   0);
+  PIN_Configure (EMAC_REF_PIN->Portnum,    EMAC_REF_PIN->Pinnum,     RTE_ENET_RMII_REF_CLK_FUNC,0,   0);
+  PIN_Configure (EMAC_RXD0_PIN->Portnum,   EMAC_RXD0_PIN->Pinnum,    RTE_ENET_RMII_RXD0_FUNC,   0,   0);
+  PIN_Configure (EMAC_RXD1_PIN->Portnum,   EMAC_RXD1_PIN->Pinnum,    RTE_ENET_RMII_RXD1_FUNC,   0,   0);
+  PIN_Configure (EMAC_RX_ER_PIN->Portnum,  EMAC_RX_ER_PIN->Pinnum,   RTE_ENET_RMII_RX_ER_FUNC,  0,   0);
 
   if (dev_175x == false) {
     /* LPC176x devices, no MDIO, MDC remap. */
-    PIN_Configure (RTE_ENET_MDI_MDC_PORT,  RTE_ENET_MDI_MDC_PIN,     RTE_ENET_MDI_MDC_FUNC,     0U,   0U);
-    PIN_Configure (RTE_ENET_MDI_MDIO_PORT, RTE_ENET_MDI_MDIO_PIN,    RTE_ENET_MDI_MDIO_FUNC,    0U,   0U);
+    PIN_Configure (RTE_ENET_MDI_MDC_PORT,  RTE_ENET_MDI_MDC_PIN,     RTE_ENET_MDI_MDC_FUNC,     0,   0);
+    PIN_Configure (RTE_ENET_MDI_MDIO_PORT, RTE_ENET_MDI_MDIO_PIN,    RTE_ENET_MDI_MDIO_FUNC,    0,   0);
   }
   else {
     /* LPC175x devices, use software MII management. */  
-    PIN_Configure (RTE_ENET_MDI_MDC_PORT,  RTE_ENET_MDI_MDC_PIN,     0U,                         0U,   0U);
-    PIN_Configure (RTE_ENET_MDI_MDIO_PORT, RTE_ENET_MDI_MDIO_PIN,    0U,                         0U,   0U);
+    PIN_Configure (RTE_ENET_MDI_MDC_PORT,  RTE_ENET_MDI_MDC_PIN,     0,                         0,   0);
+    PIN_Configure (RTE_ENET_MDI_MDIO_PORT, RTE_ENET_MDI_MDIO_PIN,    0,                         0,   0);
     GPIO_SetDir(EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum,  GPIO_DIR_OUTPUT);
   }
   /* Enable P1 Ethernet Pins. */
-  LPC_PINCON->PINSEL2 = 0x50150105U;
+  LPC_PINCON->PINSEL2 = 0x50150105;
   if (dev_175x == false) {
     /* LPC176x devices, no MDIO, MDC remap. */
-    LPC_PINCON->PINSEL3 = (LPC_PINCON->PINSEL3 & ~0x0000000FU) | 0x00000005U;
+    LPC_PINCON->PINSEL3 = (LPC_PINCON->PINSEL3 & ~0x0000000F) | 0x00000005;
   }
   else {
     /* LPC175x devices, use software MII management. */  
-    LPC_PINCON->PINSEL4 &= ~0x000F0000U;
+    LPC_PINCON->PINSEL4 &= ~0x000F0000;
     LPC_GPIO2->FIODIR   |= MDC_MASK;
   }
 #elif defined (LPC177x_8x)
@@ -471,30 +456,30 @@ static int32_t Uninitialize (void) {
   uint32_t cfg_val;
 #endif 
 
-  emac.flags = 0U;
+  emac.flags = 0;
 
 #if defined (LPC175x_6x)
   /* Disable Ethernet Pins. */
-  PIN_Configure (EMAC_TXD0_PIN->Portnum,  EMAC_TXD0_PIN->Pinnum,  0U, 0U, 0U);
-  PIN_Configure (EMAC_TXD1_PIN->Portnum,  EMAC_TXD1_PIN->Pinnum,  0U, 0U, 0U);
-  PIN_Configure (EMAC_TX_EN_PIN->Portnum, EMAC_TX_EN_PIN->Pinnum, 0U, 0U, 0U);
-  PIN_Configure (EMAC_CRS_PIN->Portnum,   EMAC_CRS_PIN->Pinnum,   0U, 0U, 0U);
-  PIN_Configure (EMAC_REF_PIN->Portnum,   EMAC_REF_PIN->Pinnum,   0U, 0U, 0U);
-  PIN_Configure (EMAC_RXD0_PIN->Portnum,  EMAC_RXD0_PIN->Pinnum,  0U, 0U, 0U);
-  PIN_Configure (EMAC_RXD1_PIN->Portnum,  EMAC_RXD1_PIN->Pinnum,  0U, 0U, 0U);
-  PIN_Configure (EMAC_RX_ER_PIN->Portnum, EMAC_RX_ER_PIN->Pinnum, 0U, 0U, 0U);
+  PIN_Configure (EMAC_TXD0_PIN->Portnum,  EMAC_TXD0_PIN->Pinnum,  0, 0, 0);
+  PIN_Configure (EMAC_TXD1_PIN->Portnum,  EMAC_TXD1_PIN->Pinnum,  0, 0, 0);
+  PIN_Configure (EMAC_TX_EN_PIN->Portnum, EMAC_TX_EN_PIN->Pinnum, 0, 0, 0);
+  PIN_Configure (EMAC_CRS_PIN->Portnum,   EMAC_CRS_PIN->Pinnum,   0, 0, 0);
+  PIN_Configure (EMAC_REF_PIN->Portnum,   EMAC_REF_PIN->Pinnum,   0, 0, 0);
+  PIN_Configure (EMAC_RXD0_PIN->Portnum,  EMAC_RXD0_PIN->Pinnum,  0, 0, 0);
+  PIN_Configure (EMAC_RXD1_PIN->Portnum,  EMAC_RXD1_PIN->Pinnum,  0, 0, 0);
+  PIN_Configure (EMAC_RX_ER_PIN->Portnum, EMAC_RX_ER_PIN->Pinnum, 0, 0, 0);
 
   if (emac.dev_175x == false) {
     /* LPC176x devices, no MDIO, MDC remap. */
-    PIN_Configure (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum,  0U, 0U, 0U);
-    PIN_Configure (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, 0U, 0U, 0U);
+    PIN_Configure (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum,  0, 0, 0);
+    PIN_Configure (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, 0, 0, 0);
   }
   else {
     /* LPC175x devices, use software MII management. */  
-    PIN_Configure (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum,  0U, 0U, 0U);
-    PIN_Configure (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, 0U, 0U, 0U);
+    PIN_Configure (EMAC_MDC_PIN->Portnum,  EMAC_MDC_PIN->Pinnum,  0, 0, 0);
+    PIN_Configure (EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, 0, 0, 0);
 
-    GPIO_SetDir (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum,  0U);
+    GPIO_SetDir (EMAC_MDC_PIN->Portnum, EMAC_MDC_PIN->Pinnum,  0);
   }
 #elif defined (LPC177x_8x)
   cfg_val = IOCON_MODE_PULLUP | IOCON_HYS_ENABLE;
@@ -542,28 +527,22 @@ static int32_t Uninitialize (void) {
 static int32_t PowerControl (ARM_POWER_STATE state) {
   uint32_t tout,hclk,div;
 
-  if ((state != ARM_POWER_OFF)  &&
-      (state != ARM_POWER_FULL) &&
-      (state != ARM_POWER_LOW)) {
-    return ARM_DRIVER_ERROR_PARAMETER;
-  }
-
   switch (state) {
     case ARM_POWER_OFF:
       /* Disable EMAC interrupts */
       NVIC_DisableIRQ(ENET_IRQn);
 
       /* Power Up the EMAC controller. */
-      LPC_SC->PCONP |= 0x40000000U;
+      LPC_SC->PCONP |= 0x40000000;
 
       /* Reset all EMAC internal modules. */
       LPC_EMAC->MAC1 = MAC1_SOFT_RES;
 
       /* A short delay after reset. */
-      for (tout = 10U; tout; tout--);
+      for (tout = 10; tout; tout--);
 
       /* Power Off the EMAC controller. */
-      LPC_SC->PCONP &= ~(0x40000000U);
+      LPC_SC->PCONP &= ~(0x40000000);
 
       emac.flags &= ~EMAC_FLAG_POWER;
       break;
@@ -576,7 +555,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       if ((emac.flags & EMAC_FLAG_POWER) != 0U) { return ARM_DRIVER_OK; }
 
       /* Power Up the EMAC controller. */
-      LPC_SC->PCONP |= 0x40000000U;
+      LPC_SC->PCONP |= 0x40000000;
 
       /* Reset all EMAC internal modules. */
       LPC_EMAC->MAC1    = MAC1_RES_TX     | MAC1_RES_MCS_TX | MAC1_RES_RX   |
@@ -591,7 +570,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
   #endif
 #endif      
       /* A short delay after reset. */
-      for (tout = 10U; tout; tout--);
+      for (tout = 10; tout; tout--);
 
       /* Initialize MAC control registers. */
       LPC_EMAC->MAC1 = MAC1_PASS_ALL;
@@ -601,16 +580,16 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       LPC_EMAC->IPGR = IPGR_DEF;
 
       LPC_EMAC->MCFG = MCFG_CLK_SEL | MCFG_RES_MII;
-      for (tout = 10U; tout; tout--);
+      for (tout = 10; tout; tout--);
 
       /* MDC clock range selection */
       hclk = SystemCoreClock;
-      if      (hclk > 150000000U) div = MCFG_CS_Div64;
-      else if (hclk > 100000000U) div = MCFG_CS_Div60;
-      else if (hclk >  60000000U) div = MCFG_CS_Div40;
-      else if (hclk >  35000000U) div = MCFG_CS_Div28;
-      else if (hclk >  20000000U) div = MCFG_CS_Div14;
-      else if (hclk >  10000000U) div = MCFG_CS_Div8;
+      if      (hclk > 150000000) div = MCFG_CS_Div64;
+      else if (hclk > 100000000) div = MCFG_CS_Div60;
+      else if (hclk >  60000000) div = MCFG_CS_Div40;
+      else if (hclk >  35000000) div = MCFG_CS_Div28;
+      else if (hclk >  20000000) div = MCFG_CS_Div14;
+      else if (hclk >  10000000) div = MCFG_CS_Div8;
       else                       div = MCFG_CS_Div4;
       LPC_EMAC->MCFG = div;
 
@@ -619,13 +598,13 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       
       /* Reset Reduced MII Logic. */
       LPC_EMAC->SUPP = SUPP_RES_RMII;
-      for (tout = 10U; tout; tout--);
-      LPC_EMAC->SUPP = 0U;
+      for (tout = 10; tout; tout--);
+      LPC_EMAC->SUPP = 0;
 
       /* Initilaize Ethernet MAC Address registers */
-      LPC_EMAC->SA0 = 0x00000000U;
-      LPC_EMAC->SA1 = 0x00000000U;
-      LPC_EMAC->SA2 = 0x00000000U;
+      LPC_EMAC->SA0 = 0x00000000;
+      LPC_EMAC->SA1 = 0x00000000;
+      LPC_EMAC->SA2 = 0x00000000;
 
       /* Initialize Tx and Rx DMA Descriptors */
       init_rx_desc ();
@@ -635,7 +614,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       LPC_EMAC->RxFilterCtrl = RFC_PERFECT_EN;
 
       /* Enable EMAC interrupts */
-      LPC_EMAC->IntClear  = 0xFFFFU;
+      LPC_EMAC->IntClear  = 0xFFFF;
       LPC_EMAC->IntEnable = INT_RX_DONE | INT_TX_DONE;
 
       /* Enable ethernet interrupts */
@@ -645,6 +624,9 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       emac.frame_end = NULL;
       emac.flags    |= EMAC_FLAG_POWER;
       break;
+
+    default:
+      return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
   
   return ARM_DRIVER_OK;
@@ -701,9 +683,9 @@ static int32_t SetMacAddress (const ARM_ETH_MAC_ADDR *ptr_addr) {
   }
 
   /* Set Ethernet MAC Address registers */
-  LPC_EMAC->SA0 = (uint32_t)(ptr_addr->b[5] << 8) | ptr_addr->b[4];
-  LPC_EMAC->SA1 = (uint32_t)(ptr_addr->b[3] << 8) | ptr_addr->b[2];
-  LPC_EMAC->SA2 = (uint32_t)(ptr_addr->b[1] << 8) | ptr_addr->b[0];
+  LPC_EMAC->SA0 = (ptr_addr->b[5] << 8) | ptr_addr->b[4];
+  LPC_EMAC->SA1 = (ptr_addr->b[3] << 8) | ptr_addr->b[2];
+  LPC_EMAC->SA2 = (ptr_addr->b[1] << 8) | ptr_addr->b[0];
 
   return ARM_DRIVER_OK;
 }
@@ -730,21 +712,21 @@ static int32_t SetAddressFilter (const ARM_ETH_MAC_ADDR *ptr_addr, uint32_t num_
   }
 
   LPC_EMAC->RxFilterCtrl &= ~(RFC_UCAST_HASH_EN | RFC_MCAST_HASH_EN);
-  LPC_EMAC->HashFilterH = 0x00000000U;
-  LPC_EMAC->HashFilterL = 0x00000000U;
+  LPC_EMAC->HashFilterH = 0x00000000;
+  LPC_EMAC->HashFilterL = 0x00000000;
   
-  if (num_addr == 0U) {
+  if (num_addr == 0) {
     return ARM_DRIVER_OK;
   }
 
   /* Calculate 64-bit Hash table for MAC addresses */
   for ( ; num_addr; ptr_addr++, num_addr--) {
-    crc = crc32_data(&ptr_addr->b[0], 6U) >> 23;
+    crc = crc32_data(&ptr_addr->b[0], 6) >> 23;
     if (crc & 0x20) {
-      LPC_EMAC->HashFilterH |= (1U << (crc & 0x1FU));
+      LPC_EMAC->HashFilterH |= (1 << (crc & 0x1F));
     }
     else {
-      LPC_EMAC->HashFilterL |= (1U << (crc & 0x1FU));
+      LPC_EMAC->HashFilterL |= (1 << (crc & 0x1F));
     }
   }
 
@@ -787,15 +769,15 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
     emac.frame_len += len;
   }
   /* Fast-copy data fragments to EMAC-DMA buffer */
-  for ( ; len > 7U; dst += 8U, frame += 8U, len -= 8U) {
-    __UNALIGNED_UINT32_WRITE(&dst[0], __UNALIGNED_UINT32_READ(&frame[0]));
-    __UNALIGNED_UINT32_WRITE(&dst[4], __UNALIGNED_UINT32_READ(&frame[4]));
+  for ( ; len > 7; dst += 8, frame += 8, len -= 8) {
+    ((__packed uint32_t *)dst)[0] = ((__packed uint32_t *)frame)[0];
+    ((__packed uint32_t *)dst)[1] = ((__packed uint32_t *)frame)[1];
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1U; dst += 2U, frame += 2U, len -= 2U) {
-    __UNALIGNED_UINT16_WRITE(&dst[0], __UNALIGNED_UINT16_READ(&frame[0]));
+  for ( ; len > 1; dst += 2, frame += 2, len -= 2) {
+    ((__packed uint16_t *)dst)[0] = ((__packed uint16_t *)frame)[0];
   }
-  if (len > 0U) dst++[0] = frame++[0];
+  if (len > 0) dst++[0] = frame++[0];
 
   if (flags & ARM_ETH_MAC_TX_FRAME_FRAGMENT) {
     /* More data to come, remember current write position */
@@ -803,13 +785,13 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
     return ARM_DRIVER_OK;
   }
 
-  Tx_Desc[idx].Ctrl = (emac.frame_len-1U) | (TCTRL_INT | TCTRL_LAST);
+  Tx_Desc[idx].Ctrl = (emac.frame_len-1) | (TCTRL_INT | TCTRL_LAST);
 
   emac.frame_end = NULL;
-  emac.frame_len = 0U;
+  emac.frame_len = 0;
 
   /* Start frame transmission. */
-  if (++idx == NUM_TX_BUF) idx = 0U;
+  if (++idx == NUM_TX_BUF) idx = 0;
   LPC_EMAC->TxProduceIndex = idx;
 
   return ARM_DRIVER_OK;
@@ -842,17 +824,17 @@ static int32_t ReadFrame (uint8_t *frame, uint32_t len) {
   idx = LPC_EMAC->RxConsumeIndex;
   src = (uint8_t const *)Rx_Desc[idx].Packet;
   /* Fast-copy data to packet buffer */
-  for ( ; len > 7U; frame += 8U, src += 8U, len -= 8U) {
-    __UNALIGNED_UINT32_WRITE(&frame[0], __UNALIGNED_UINT32_READ(&src[0]));
-    __UNALIGNED_UINT32_WRITE(&frame[4], __UNALIGNED_UINT32_READ(&src[4]));
+  for ( ; len > 7; frame += 8, src += 8, len -= 8) {
+    ((__packed uint32_t *)frame)[0] = ((uint32_t *)src)[0];
+    ((__packed uint32_t *)frame)[1] = ((uint32_t *)src)[1];
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1U; frame += 2U, src += 2U, len -= 2U) {
-    __UNALIGNED_UINT16_WRITE(&frame[0], __UNALIGNED_UINT16_READ(&src[0]));
+  for ( ; len > 1; frame += 2, src += 2, len -= 2) {
+    ((__packed uint16_t *)frame)[0] = ((uint16_t *)src)[0];
   }
-  if (len > 0U) frame[0] = src[0];
+  if (len > 0) frame[0] = src[0];
 
-  if (++idx == NUM_RX_BUF) idx = 0U;
+  if (++idx == NUM_RX_BUF) idx = 0;
   /* Release frame from EMAC buffer */
   LPC_EMAC->RxConsumeIndex = idx;
 
@@ -869,29 +851,29 @@ static uint32_t GetRxFrameSize (void) {
 
   if (!(emac.flags & EMAC_FLAG_POWER)) {
     /* Driver not yet powered */
-    return (0U);
+    return (0);
   }
 
   idx = LPC_EMAC->RxConsumeIndex;
   if (idx == LPC_EMAC->RxProduceIndex) {
     /* No packet received */
-    return (0U);
+    return (0);
   }
 
   info = Rx_Stat[idx].Info;
   if (!(info & RINFO_LAST_FLAG) || (info & RINFO_ERR_MASK)) {
     /* Error, this block is invalid */
-    return (0xFFFFFFFFU);
+    return (0xFFFFFFFF);
   }
 
-  return ((info & RINFO_SIZE) - 3U);
+  return ((info & RINFO_SIZE) - 3);
 }
 
 /* Ethernet IRQ Handler */
 void ENET_IRQHandler (void) {
   /* EMAC Ethernet Controller Interrupt function. */
   uint32_t int_stat;
-  uint32_t event = 0U;
+  uint32_t event = 0;
 
   int_stat = (LPC_EMAC->IntStatus & LPC_EMAC->IntEnable);
   LPC_EMAC->IntClear = int_stat;
@@ -917,8 +899,6 @@ void ENET_IRQHandler (void) {
   \return      \ref execution_status
 */
 static int32_t GetRxFrameTime (ARM_ETH_MAC_TIME *time) {
-  (void)time;
-
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
 
@@ -929,8 +909,6 @@ static int32_t GetRxFrameTime (ARM_ETH_MAC_TIME *time) {
   \return      \ref execution_status
 */
 static int32_t GetTxFrameTime (ARM_ETH_MAC_TIME *time) {
-  (void)time;
-
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
 
@@ -974,8 +952,8 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       switch (arg & ARM_ETH_MAC_DUPLEX_Msk) {
         case ARM_ETH_MAC_DUPLEX_FULL:
           mac2    |= MAC2_FULL_DUP;
-          command |= CR_FULL_DUP;
-          igpt    |= IPGT_FULL_DUP;
+          command |= CR_FULL_DUP;        
+          igpt    |= IPGT_FULL_DUP;        
           break;
       }
 
@@ -1018,7 +996,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       /* Enable/disable MAC transmitter */
       command = LPC_EMAC->Command & ~CR_TX_EN;
 
-      if (arg != 0U) {
+      if (arg != 0) {
         command |= CR_TX_EN;
       }
       LPC_EMAC->Command = command;
@@ -1028,7 +1006,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       /* Enable/disable MAC receiver */
       command = LPC_EMAC->Command & ~CR_RX_EN;
       mac1    = LPC_EMAC->MAC1    & ~MAC1_REC_EN;
-      if (arg != 0U) {
+      if (arg != 0) {
         command |= CR_RX_EN;
         mac1    |= MAC1_REC_EN;
       }
@@ -1065,13 +1043,11 @@ static int32_t Control (uint32_t control, uint32_t arg) {
 /**
   \fn          int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time)
   \brief       Control Precision Timer.
-  \param[in]   control  Operation
+  \param[in]   control  operation
   \param[in]   time     Pointer to time structure
   \return      \ref execution_status
 */
 static int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time) {
-  (void)time;
-  (void)control;
 
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
@@ -1102,22 +1078,22 @@ static int32_t PHY_Read (uint8_t phy_addr, uint8_t reg_addr, uint16_t *data) {
     /* Remapped MDC on P2.8 and MDIO on P2.9 does not work. */
     GPIO_SetDir(EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, GPIO_DIR_OUTPUT);
     /* 32 consecutive ones on MDO to establish sync */
-    output_MDIO (0xFFFFFFFFU, 32U);
+    output_MDIO (0xFFFFFFFF, 32);
 
     /* start code (01), read command (10) */
-    output_MDIO (0x06U, 4U);
+    output_MDIO (0x06, 4);
 
     /* write PHY address */
-    output_MDIO (phy_addr, 5U);
+    output_MDIO (phy_addr, 5);
 
     /* write the PHY register to write */
-    output_MDIO (reg_addr, 5U);
+    output_MDIO (reg_addr, 5);
 
     /* turnaround MDO is tristated */
     turnaround_MDIO ();
 
     /* read the data value */
-    *data = (uint16_t)input_MDIO ();
+    *data = input_MDIO ();
 
     /* turnaround MDIO is tristated */
     turnaround_MDIO ();
@@ -1125,26 +1101,16 @@ static int32_t PHY_Read (uint8_t phy_addr, uint8_t reg_addr, uint16_t *data) {
     return ARM_DRIVER_OK;
   }
   else {
-    LPC_EMAC->MADR = (uint32_t)(phy_addr << 8) | reg_addr;
+    LPC_EMAC->MADR = (phy_addr << 8) | reg_addr;
     LPC_EMAC->MCMD = MCMD_READ;
-
     /* Wait until operation completed */
-#if   defined(RTE_CMSIS_RTOS2)
-    tick = osKernelGetSysTimerCount();
-#elif defined(RTE_CMSIS_RTOS)
     tick = osKernelSysTick();
-#endif
     do {
-      if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) break;
-#if   defined(RTE_CMSIS_RTOS2)
-    } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
-#elif defined(RTE_CMSIS_RTOS)
+      if ((LPC_EMAC->MIND & MIND_BUSY) == 0) break;
     } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
-#endif
-
-    if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) {
-      LPC_EMAC->MCMD = 0U;
-      *data = (uint16_t)LPC_EMAC->MRDD;
+    if ((LPC_EMAC->MIND & MIND_BUSY) == 0) {
+      LPC_EMAC->MCMD = 0;
+      *data = LPC_EMAC->MRDD;
       return ARM_DRIVER_OK;
     }
   }
@@ -1172,22 +1138,22 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
     /* Remapped MDC on P2.8 and MDIO on P2.9 do not work. */
     GPIO_SetDir(EMAC_MDIO_PIN->Portnum, EMAC_MDIO_PIN->Pinnum, GPIO_DIR_OUTPUT);
     /* 32 consecutive ones on MDO to establish sync */
-    output_MDIO (0xFFFFFFFFU, 32U);
+    output_MDIO (0xFFFFFFFF, 32);
 
     /* start code (01), write command (01) */
-    output_MDIO (0x05U, 4U);
+    output_MDIO (0x05, 4);
 
     /* write PHY address */
-    output_MDIO (phy_addr, 5U);
+    output_MDIO (phy_addr, 5);
 
     /* write the PHY register to write */
-    output_MDIO (reg_addr, 5U);
+    output_MDIO (reg_addr, 5);
 
     /* turnaround MDIO (1,0)*/
-    output_MDIO (0x02U, 2U);
+    output_MDIO (0x02, 2);
 
     /* write the data value */
-    output_MDIO (data, 16U);
+    output_MDIO (data, 16);
 
     /* turnaround MDO is tristated */
     turnaround_MDIO ();
@@ -1196,24 +1162,16 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
   }
   else {
     /* Hardware MII Management for LPC176x devices. */
-    LPC_EMAC->MADR = (uint32_t)(phy_addr << 8) | reg_addr;
+    LPC_EMAC->MADR = (phy_addr << 8) | reg_addr;
     LPC_EMAC->MWTD = data;
 
     /* Wait until operation completed */
-#if   defined(RTE_CMSIS_RTOS2)
-    tick = osKernelGetSysTimerCount();
-#elif defined(RTE_CMSIS_RTOS)
     tick = osKernelSysTick();
-#endif
     do {
-      if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) break;
-#if   defined(RTE_CMSIS_RTOS2)
-    } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
-#elif defined(RTE_CMSIS_RTOS)
+      if ((LPC_EMAC->MIND & MIND_BUSY) == 0) break;
     } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
-#endif
     
-    if ((LPC_EMAC->MIND & MIND_BUSY) == 0U) {
+    if ((LPC_EMAC->MIND & MIND_BUSY) == 0) {
       return ARM_DRIVER_OK;
     }
   }

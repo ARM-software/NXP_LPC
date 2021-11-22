@@ -1,6 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
- * rights reserved.
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        10. Januar 2020
- * $Revision:    V2.14
+ * $Date:        02. March 2016
+ * $Revision:    V2.11
  *
  * Driver:       Driver_USBD0
  * Configured:   via RTE_Device.h configuration file
@@ -42,12 +40,6 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
- *  Version 2.14
- *    Removed minor compiler warnings
- *  Version 2.13
- *    Added support for ARM Compiler 6
- *  Version 2.12
- *    Fixed USBD_HW_ReadEP/USBD_HW_WriteEP function behavior for data parameter equal to NULL
  *  Version 2.11
  *    Corrected EndpointUnconfigure function for isochronous endpoints
  *    (unconfiguring one isochronous endpoint prevented further functionality
@@ -79,6 +71,7 @@
  *    Initial release for CMSIS Drivers v2.01 API
  */
 
+
 #include <stdint.h>
 #include <string.h>
 
@@ -90,6 +83,9 @@
   #include "LPC177x_8x.h"
 #endif
 #include "USBD_LPC17xx.h"
+
+#include "RTE_Device.h"
+#include "RTE_Components.h"
 
 #if      (RTE_USB_USB0 == 0)
 #error   "USB is not enabled in the RTE_Device.h!"
@@ -118,8 +114,6 @@
 #define USBD_DRIVER_INITIALIZED         (1U     )
 #define USBD_DRIVER_POWERED             (1U << 1)
 
-extern ARM_DRIVER_USBD Driver_USBD0;
-
 extern uint8_t usb_role;
 extern uint8_t usb_state;
 
@@ -138,7 +132,7 @@ extern int32_t USB_PinsUnconfigure      (void);
 
 // USBD Driver *****************************************************************
 
-#define ARM_USBD_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,14)
+#define ARM_USBD_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,11)
 
 // Driver Version
 static const ARM_DRIVER_VERSION usbd_driver_version = { ARM_USBD_API_VERSION, ARM_USBD_DRV_VERSION };
@@ -148,9 +142,6 @@ static const ARM_USBD_CAPABILITIES usbd_driver_capabilities = {
   1U,   // VBUS Detection
   1U,   // Event VBUS On
   1U    // Event VBUS Off
-#if (defined(ARM_USBD_API_VERSION) && (ARM_USBD_API_VERSION >= 0x202U))
-, 0U
-#endif
 };
 
 #define EP_PHY(ep_addr)                 ((((ep_addr) & 0x0FU) << 1) + (((ep_addr) >> 7) & 1U))
@@ -182,7 +173,7 @@ static ENDPOINT_t          ep[(USBD_MAX_ENDPOINT_NUM + 1U) * 2U];
 
 // Function prototypes
 static int32_t USBD_EndpointConfigure (uint8_t ep_addr, uint8_t ep_type, uint16_t ep_max_packet_size);
-void USBD_IRQ (void);
+
 
 // Auxiliary functions
 
@@ -347,20 +338,14 @@ static uint32_t USBD_HW_ReadEP (uint32_t ep_log, uint8_t *data) {
   num &= USBD_PKT_LNGTH_MASK;
 
   for (i = 0U; (i + 4U) <= num; i += 4U) {
-    if (data != NULL) {
-      __UNALIGNED_UINT32_WRITE(data, LPC_USB->RxData);
-      data += 4U;
-    } else {
-      LPC_USB->RxData;
-    }
+    *((__packed uint32_t *)data) = LPC_USB->RxData;
+    data += 4U;
   }
   if (i < num) {
     val = LPC_USB->RxData;
     for (; i < num; i++) {
-      if (data != NULL) {
-        *(data++) = (uint8_t)val;
-        val >>= 8;
-      }
+      *(data++) = val;
+      val >>= 8;
     }
   }
 
@@ -386,8 +371,6 @@ static uint32_t USBD_HW_WriteEP (uint32_t ep_log, uint8_t *data, uint32_t num) {
   uint32_t ep_phy;
   uint32_t i;
 
-  if ((data == NULL) && (num != 0U)) { return 0U; }
-
   ep_phy = EP_PHY(ep_log | 0x80U);
 
   if (num > ep[ep_phy].max_packet_size) {
@@ -399,7 +382,7 @@ static uint32_t USBD_HW_WriteEP (uint32_t ep_log, uint8_t *data, uint32_t num) {
   LPC_USB->TxPLen = num;
 
   for (i = 0U; i < (num + 3U) / 4U; i++) {
-     LPC_USB->TxData = __UNALIGNED_UINT32_READ(data);
+    LPC_USB->TxData = *((__packed uint32_t *)data);
     data += 4U;
   }
 
@@ -555,7 +538,7 @@ static int32_t USBD_PowerControl (ARM_POWER_STATE state) {
       NVIC_EnableIRQ   (USB_IRQn);                      // Enable interrupt
       break;
 
-    case ARM_POWER_LOW:
+    default:
       return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
 
@@ -870,7 +853,7 @@ static int32_t USBD_EndpointTransfer (uint8_t ep_addr, uint8_t *data, uint32_t n
      ((ep_phy == 0U) && (num != 0U))) {
     if ((ep_addr & 0x80U) != 0U) {                                        // for IN Endpoint
       ptr_ep->active = 1U;
-      ptr_ep->num_transferring = (uint16_t)USBD_HW_WriteEP (ep_phy >> 1, ptr_ep->data, ptr_ep->num);
+      ptr_ep->num_transferring = USBD_HW_WriteEP (ep_phy >> 1, ptr_ep->data, ptr_ep->num);
     } else {                                                              // for OUT Endpoint
       ptr_ep->active = 1U;
       if (ptr_ep->out_irq_pending != 0U) {                                // if something was already received
@@ -947,7 +930,7 @@ static uint16_t USBD_GetFrameNumber (void) {
   if (usbd_int_active == 0U) { NVIC_DisableIRQ(USB_IRQn); }
 
   SIE_WrCmd (USBD_CMD_RD_FRAME);
-  val  = (uint16_t)SIE_RdCmdData(USBD_DAT_RD_FRAME);
+  val  = SIE_RdCmdData(USBD_DAT_RD_FRAME);
   val |= SIE_RdCmdData(USBD_DAT_RD_FRAME) << 8;
 
   usbd_sie_busy = 0U;
@@ -1030,7 +1013,7 @@ void USBD_IRQ (void) {
               evt_ep_in  |= (1U << (ep_phy >> 1U));     // IN event
             } else {
               // Write data to send
-              ptr_ep->num_transferring = (uint16_t)USBD_HW_WriteEP (ep_phy >> 1, ptr_ep->data + ptr_ep->num_transferred_total, ptr_ep->num - ptr_ep->num_transferred_total);
+              ptr_ep->num_transferring = USBD_HW_WriteEP (ep_phy >> 1, ptr_ep->data + ptr_ep->num_transferred_total, ptr_ep->num - ptr_ep->num_transferred_total);
             }
           }
         }
@@ -1091,7 +1074,7 @@ void USBD_IRQ (void) {
               evt_ep_in |= (1U << ep_log);              // IN event
             } else {
               // Write data to send
-              ptr_ep->num_transferring = (uint16_t)USBD_HW_WriteEP (ep_log, ptr_ep->data + ptr_ep->num_transferred_total, ptr_ep->num - ptr_ep->num_transferred_total);
+              ptr_ep->num_transferring = USBD_HW_WriteEP (ep_log, ptr_ep->data + ptr_ep->num_transferred_total, ptr_ep->num - ptr_ep->num_transferred_total);
             }
           }
         }
@@ -1105,7 +1088,7 @@ void USBD_IRQ (void) {
     for (ep_log = 0U; ep_log <= USBD_MAX_ENDPOINT_NUM; ep_log++) {
       if ((evt_ep_in & ep_msk) != 0U) {
         evt_ep_in &= ~ep_msk;
-        SignalEndpointEvent((uint8_t)ep_log | 0x80U, ARM_USBD_EVENT_IN);
+        SignalEndpointEvent(ep_log | 0x80U, ARM_USBD_EVENT_IN);
       }
       if (evt_ep_in == 0U) { break; }
       ep_msk <<= 1U;
@@ -1116,7 +1099,7 @@ void USBD_IRQ (void) {
     for (ep_log = 0U; ep_log <= USBD_MAX_ENDPOINT_NUM; ep_log++) {
       if ((evt_ep_out & ep_msk) != 0U) {
         evt_ep_out &= ~ep_msk;
-        SignalEndpointEvent((uint8_t)ep_log, ARM_USBD_EVENT_OUT);
+        SignalEndpointEvent(ep_log, ARM_USBD_EVENT_OUT);
       }
       if (evt_ep_out == 0U) { break; }
       ep_msk <<= 1U;

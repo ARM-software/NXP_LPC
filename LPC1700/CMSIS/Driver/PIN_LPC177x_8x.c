@@ -1,6 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
- * rights reserved.
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -8,7 +7,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -16,18 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- *
- * $Date:        01. August 2019
- * $Revision:    V1.2
+ * $Date:        02. March 2016
+ * $Revision:    V1.0
  *
  * Project:      PIN Driver for NXP LPC177x_8x
  * -------------------------------------------------------------------------- */
 
+#include "LPC177x_8x.h"
 #include "PIN_LPC177x_8x.h"
 
-#include "LPC177x_8x.h"
-
-#define PIN_Cfg(port,pin)     (*((volatile uint32_t *) (LPC_IOCON_BASE + ((port * 32U + pin)*sizeof(uint32_t)))))
+#define PIN_Cfg(port,pin)     (*((volatile uint32_t *) (LPC_IOCON_BASE + ((port * 32 + pin)*sizeof(uint32_t)))))
 
 /**
   \fn          int32_t PIN_Configure (uint32_t function) {
@@ -41,7 +38,7 @@
 */
 int32_t PIN_Configure (uint8_t port, uint8_t pin, uint32_t pin_cfg) {
 
-  if ((port > 5) || (pin > 31)) return -1;
+  if ((port > 3) || (pin > 31)) return -1;
   PIN_Cfg(port, pin) = pin_cfg;
   return(0);  
 }
@@ -64,10 +61,10 @@ int32_t PIN_ConfigureI2C0Pins (uint8_t port, uint8_t pin, uint32_t i2cMode)
 
   switch(port)
   {
-    case 0U:
+    case 0:
       if ((pin == 27) || (pin == 28)) break;
       else return (-1);
-    case 5U:
+    case 5:
       if ((pin == 2 ) || (pin ==  3)) break;
       else return (-1);
     default:

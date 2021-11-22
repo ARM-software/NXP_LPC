@@ -1,5 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All
  * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -35,15 +35,17 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.10
+ *    - Fixed build issue with LPC1700
  *  Version 2.9
  *    - Removed minor Compiler warnings
  *  Version 2.8
  *    - Removed Arm Compiler warnings
- *    - Made Pin configuration const 
+ *    - Made Pin configuration const
  *  Version 2.7
  *    - MISO and MOSI pins can be configured as "not used"
  *  Version 2.6
- *    - Updated Pin configuration 
+ *    - Updated Pin configuration
  *    - Driver update to work with GPDMA_LPC17xx ver.: 1.3
  *  Version 2.5
  *    - Corrected ssel pin GPIO mode configuration (for LPC177x_8x)
@@ -82,7 +84,7 @@ void SSP2_GPDMA_Tx_SignalEvent (uint32_t event);
 void SSP2_GPDMA_Rx_SignalEvent (uint32_t event);
 #endif
 
-#define ARM_SPI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,9)   // driver version
+#define ARM_SPI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,10)   // driver version
 
 #if ((defined(RTE_Drivers_SPI0) || defined(RTE_Drivers_SPI1) || defined(RTE_Drivers_SPI2)) && (!RTE_SSP0) && (!RTE_SSP1) && (!RTE_SSP2))
 #error "SSP not configured in RTE_Device.h!"
@@ -111,7 +113,7 @@ void SSP2_GPDMA_Rx_SignalEvent (uint32_t event);
   #define PCLKSEL_CCLK_DIV_2   (2U)
   #define PCLKSEL_CCLK_DIV_4   (0U)
   #define PCLKSEL_CCLK_DIV_8   (3U)
-  
+
   // SSP peripheral clock selection bit position definitions
   #define SSP0_PCLKSEL1_POS    (10U)
   #define SSP1_PCLKSEL0_POS    (20U)
@@ -150,7 +152,7 @@ static const PIN         SSPO_pin_ssel = {RTE_SSP0_SSEL_PORT, RTE_SSP0_SSEL_BIT}
 
 static SSP_RESOURCES SSP0_Resources = {
      LPC_SSP0,
-  { 
+  {
 #if (RTE_SSP0_SSEL_PIN_EN != 0U)
     &SSPO_pin_ssel,
 #else
@@ -269,7 +271,7 @@ static SSP_RESOURCES SSP1_Resources = {
     RTE_SSP1_MISO_IO_WA,
     RTE_SSP1_MOSI_IO_WA,
     0U
-#endif  
+#endif
   },
   { (1U << 10),
     &(LPC_SC->PCONP),
@@ -295,7 +297,7 @@ static SSP_RESOURCES SSP1_Resources = {
 };
 #endif /* RTE_SSP1 */
 
-#if (RTE_SPI)
+#if defined(RTE_SSP2) && (RTE_SSP2)
 static SSP_INFO          SSP2_Info = { 0 };
 static SSP_TRANSFER_INFO SSP2_Xfer = { 0 };
 static const PIN         SSP2_pin_sck  = {RTE_SSP2_SCK_PORT,  RTE_SSP2_SCK_BIT};
@@ -506,7 +508,7 @@ static int32_t SSPx_Uninitialize (SSP_RESOURCES *ssp) {
                                                          (IOCON_DIGITIAL_MODE) : IOCON_MODE_PULLUP));
   }
 #endif
-  
+
   // Uninitialize DMA
   if (ssp->dma.tx_en || ssp->dma.rx_en) { GPDMA_Uninitialize (); }
 
@@ -539,7 +541,7 @@ static int32_t SSPx_PowerControl (ARM_POWER_STATE state, SSP_RESOURCES *ssp) {
 
       if (ssp->info->status.busy) {
         // If DMA mode - disable DMA channel
-        if (ssp->dma.tx_en) { GPDMA_ChannelDisable (ssp->dma.tx_ch); } 
+        if (ssp->dma.tx_en) { GPDMA_ChannelDisable (ssp->dma.tx_ch); }
         // If DMA mode - disable DMA channel
         if (ssp->dma.rx_en) { GPDMA_ChannelDisable (ssp->dma.rx_ch); }
       }
@@ -865,7 +867,7 @@ static int32_t SSPx_Control (uint32_t control, uint32_t arg, SSP_RESOURCES *ssp)
     ssp->info->status.busy = 0U;
     ssp->reg->CR1 |=  SSPx_CR1_SSE;         // Enable  SSP
     return ARM_DRIVER_OK;
-  }  
+  }
 
   if (ssp->info->status.busy)            { return ARM_DRIVER_ERROR_BUSY; }
 
@@ -951,7 +953,7 @@ found_best:
       ssp->xfer->def_val = (uint16_t)(arg & 0xFFFFU);
       return ARM_DRIVER_OK;
 
-    case ARM_SPI_CONTROL_SS:                // Control Slave Select; arg = 0:inactive, 1:active 
+    case ARM_SPI_CONTROL_SS:                // Control Slave Select; arg = 0:inactive, 1:active
       if (((ssp->info->mode & ARM_SPI_CONTROL_Msk)        != ARM_SPI_MODE_MASTER)  ||
           ((ssp->info->mode & ARM_SPI_SS_MASTER_MODE_Msk) != ARM_SPI_SS_MASTER_SW)) {
         return ARM_DRIVER_ERROR;

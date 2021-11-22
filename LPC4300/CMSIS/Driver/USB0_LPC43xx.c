@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,13 +16,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.2
+ * $Date:        30. April 2019
+ * $Revision:    V1.4
  *
  * Project:      USB common (Device and Host) module for NXP LPC43xx
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.4
+ *    Removed Arm Compiler 6 warnings
+ *  Version 1.3
+ *    Disabled pull-up and enabled input buffer on Power Fault pin for Host
  *  Version 1.2
  *    Added support for Cortex-M0APP and Cortex-M0SUB
  *  Version 1.1
@@ -30,13 +35,7 @@
  *    Initial release
  */
 
-#include "LPC43xx.h"
-#include "SCU_LPC43xx.h"
-
-#include "Driver_USB.h"
-
-#include "RTE_Device.h"
-#include "RTE_Components.h"
+#include "USB_LPC43xx.h"
 
 #if   (defined(CORE_M0SUB))
 #define MX_USB0_IRQHandler M0S_USB0_IRQHandler
@@ -48,6 +47,11 @@
 
 volatile uint8_t USB0_role  = ARM_USB_ROLE_NONE;
 volatile uint8_t USB0_state = 0U;
+
+// Function Prototypes
+void MX_USB0_IRQHandler (void);
+void USB0_PinsConfigure (void);
+void USB0_PinsUnconfigure (void);
 
 #ifdef RTE_Drivers_USBH0
 extern void USBH0_IRQ (void);
@@ -112,7 +116,7 @@ void USB0_PinsConfigure (void) {
     SCU_PinConfigure(RTE_USB0_PPWR_PORT,      RTE_USB0_PPWR_BIT,      RTE_USB0_PPWR_FUNC);
 #endif
 #if (RTE_USB0_PWR_FAULT_PIN_EN)
-    SCU_PinConfigure(RTE_USB0_PWR_FAULT_PORT, RTE_USB0_PWR_FAULT_BIT, RTE_USB0_PWR_FAULT_FUNC);
+    SCU_PinConfigure(RTE_USB0_PWR_FAULT_PORT, RTE_USB0_PWR_FAULT_BIT, RTE_USB0_PWR_FAULT_FUNC | SCU_SFS_EPUN | SCU_SFS_EZI);
 #endif
   }
 }
@@ -125,19 +129,19 @@ void USB0_PinsUnconfigure (void) {
 
   // Common (Device and Host) Pins
 #if (RTE_USB0_IND0_PIN_EN)
-  SCU_PinConfigure(RTE_USB0_IND0_PORT, RTE_USB0_IND0_BIT, 0);
+  SCU_PinConfigure(RTE_USB0_IND0_PORT, RTE_USB0_IND0_BIT, 0U);
 #endif
 #if (RTE_USB0_IND1_PIN_EN)
-  SCU_PinConfigure(RTE_USB0_IND1_PORT, RTE_USB0_IND1_BIT, 0);
+  SCU_PinConfigure(RTE_USB0_IND1_PORT, RTE_USB0_IND1_BIT, 0U);
 #endif
 
   // Host Pins
   if (USB0_role == ARM_USB_ROLE_HOST) {
 #if (RTE_USB0_PPWR_PIN_EN)
-    SCU_PinConfigure(RTE_USB0_PPWR_PORT,      RTE_USB0_PPWR_BIT,      0);
+    SCU_PinConfigure(RTE_USB0_PPWR_PORT,      RTE_USB0_PPWR_BIT,      0U);
 #endif
 #if (RTE_USB0_PWR_FAULT_PIN_EN)
-    SCU_PinConfigure(RTE_USB0_PWR_FAULT_PORT, RTE_USB0_PWR_FAULT_BIT, 0);
+    SCU_PinConfigure(RTE_USB0_PWR_FAULT_PORT, RTE_USB0_PWR_FAULT_BIT, 0U);
 #endif
   }
 }

@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ * $Date:        11. April 2019
+ * $Revision:    V1.1
  *
  * Project:      CAN Driver Definitions for NXP LPC43xx
  * -------------------------------------------------------------------------- */
@@ -24,9 +25,7 @@
 #ifndef __CAN_LPC43XX_H
 #define __CAN_LPC43XX_H
 
-#include <stdint.h>
 #include <string.h>
-
 #include "Driver_CAN.h"
 
 #include "LPC43xx.h"
@@ -150,5 +149,13 @@
 #define IF_MCTRL_INTPND_Msk            (1U      << 13)
 #define IF_MCTRL_MSGLST_Msk            (1U      << 14)
 #define IF_MCTRL_NEWDAT_Msk            (1U      << 15)
+
+// Global functions and variables exported by driver .c module
+#if (RTE_CAN_CAN0 == 1U)
+extern ARM_DRIVER_CAN Driver_CAN0;
+#endif
+#if (RTE_CAN_CAN1 == 1U)
+extern ARM_DRIVER_CAN Driver_CAN1;
+#endif
 
 #endif // __CAN_LPC43XX_H

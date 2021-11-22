@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2021 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.10
+ * $Date:        6. June 2021
+ * $Revision:    V2.17
  *
  * Driver:       Driver_USART0, Driver_USART1, Driver_USART2, Driver_USART3
  * Configured:   via RTE_Device.h configuration file
@@ -34,6 +35,21 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.16
+ *    - Updated PIN_ID structure alignment
+ *    - Removed minor compiler warnings
+ *  Version 2.15
+ *    - Added function USART_PIN_Configure()
+ *  Version 2.14
+ *    - Updated Baudrate divider calculation
+ *  Version 2.13
+ *    - Removed Arm Compiler warnings
+ *    - Added timeout to wait loops
+ *    - Made Pin configuration const 
+ *  Version 2.12
+ *    - Updated USART_Send function. Corrected send_active flag handling.
+ *  Version 2.11
+ *    - RX and TX pins can be configured as "not used"
  *  Version 2.10
  *    - Driver update to work with GPDMA_LPC43xx ver.: 1.5
  *  Version 2.9
@@ -71,10 +87,9 @@
  */
 #include "USART_LPC43xx.h"
 
-#include "RTE_Device.h"
-#include "RTE_Components.h"
+#include <string.h>
 
-#define ARM_USART_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,10)
+#define ARM_USART_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,17)
 
 #if ((!RTE_USART0) && (!RTE_UART1) && (!RTE_USART2) && (!RTE_USART3))
 #error "USART not enabled in RTE_Device.h!"
@@ -82,6 +97,19 @@
 
 // Driver Version
 static const ARM_DRIVER_VERSION usart_driver_version = { ARM_USART_API_VERSION, ARM_USART_DRV_VERSION };
+
+// Function Prototypes
+static int32_t USART_PowerControl (ARM_POWER_STATE  state,    USART_RESOURCES *usart);
+static int32_t USART_Control (uint32_t control, uint32_t arg, USART_RESOURCES *usart);
+
+int32_t USART_SetBaudrate (uint32_t baudrate, USART_RESOURCES *usart);
+void USART0_IRQHandler (void);
+void UART1_IRQHandler (void);
+void USART2_IRQHandler (void);
+void USART3_IRQHandler (void);
+
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT         (SystemCoreClock / 64U)
 
 #if   (defined(CORE_M0SUB))
 #define MX_USART0_IRQn                 M0S_USART0_IRQn
@@ -142,7 +170,7 @@ static const ARM_DRIVER_VERSION usart_driver_version = { ARM_USART_API_VERSION, 
 
 // Fractional divider lookup table
 static const FRACT_DIVIDER fract_div_lookup_table[] = {
-  {(1 << 12), 0},
+  {(1U << 12), 0U, 0U},
   FRACT_DIV(1,  15),
   FRACT_DIV(1,  14),
   FRACT_DIV(1,  13),
@@ -222,10 +250,14 @@ static const FRACT_DIVIDER fract_div_lookup_table[] = {
 // USART0
 #if (RTE_USART0)
 static USART_INFO USART0_Info = {0};
-static PIN_ID USART0_pin_tx  = { RTE_USART0_TX_PORT,   RTE_USART0_TX_BIT,   RTE_USART0_TX_FUNC };
-static PIN_ID USART0_pin_rx  = { RTE_USART0_RX_PORT,   RTE_USART0_RX_BIT,   RTE_USART0_RX_FUNC };
+#if (RTE_USART0_TX_PIN_EN == 1)
+static const PIN_ID USART0_pin_tx  = { RTE_USART0_TX_PORT,   RTE_USART0_TX_BIT,   {0U, 0U}, RTE_USART0_TX_FUNC };
+#endif
+#if (RTE_USART0_RX_PIN_EN == 1)
+static const PIN_ID USART0_pin_rx  = { RTE_USART0_RX_PORT,   RTE_USART0_RX_BIT,   {0U, 0U}, RTE_USART0_RX_FUNC };
+#endif
 #if (RTE_USART0_UCLK_PIN_EN == 1)
-static PIN_ID USART0_pin_clk = { RTE_USART0_UCLK_PORT, RTE_USART0_UCLK_BIT, RTE_USART0_UCLK_FUNC };
+static const PIN_ID USART0_pin_clk = { RTE_USART0_UCLK_PORT, RTE_USART0_UCLK_BIT, {0U, 0U}, RTE_USART0_UCLK_FUNC };
 #endif
 
 #if (RTE_USART0_DMA_TX_EN == 1)
@@ -233,6 +265,7 @@ void USART0_GPDMA_Tx_Event (uint32_t event);
 static USART_DMA USART0_DMA_Tx = {RTE_USART0_DMA_TX_CH,
                                   RTE_USART0_DMA_TX_PERI,
                                   RTE_USART0_DMA_TX_PERI_SEL,
+                                  0U,
                                   USART0_GPDMA_Tx_Event};
 #endif
 #if (RTE_USART0_DMA_RX_EN == 1)
@@ -240,51 +273,59 @@ void USART0_GPDMA_Rx_Event (uint32_t event);
 static USART_DMA USART0_DMA_Rx = {RTE_USART0_DMA_RX_CH,
                                   RTE_USART0_DMA_RX_PERI,
                                   RTE_USART0_DMA_RX_PERI_SEL,
+                                  0U,
                                   USART0_GPDMA_Rx_Event};
 #endif
 
-static const USART_RESOURCES USART0_Resources = {
+static USART_RESOURCES USART0_Resources = {
   {     // Capabilities
-    1,  // supports UART (Asynchronous) mode
+    1U, // supports UART (Asynchronous) mode
 #if (RTE_USART0_UCLK_PIN_EN == 1)
-    1,  // supports Synchronous Master mode
-    1,  // supports Synchronous Slave mode
+    1U, // supports Synchronous Master mode
+    1U, // supports Synchronous Slave mode
 #else
-    0,  // supports Synchronous Master mode
-    0,  // supports Synchronous Slave mode
+    0U, // supports Synchronous Master mode
+    0U, // supports Synchronous Slave mode
 #endif
-    1,  // supports UART Single-wire mode
-    0,  // supports UART IrDA mode
-    1,  // supports UART Smart Card mode
+    1U, // supports UART Single-wire mode
+    0U, // supports UART IrDA mode
+    1U, // supports UART Smart Card mode
 #if (RTE_USART0_UCLK_PIN_EN == 1)
-    1,  // Smart Card Clock generator
+    1U, // Smart Card Clock generator
 #else
-    0,
+    0U,
 #endif
-    0,  // RTS Flow Control available
-    0,  // CTS Flow Control available
-    0,  // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
-#if ((RTE_USART0_DMA_RX_EN == 1) || (USART0_TRIG_LVL == USART_TRIG_LVL_1))
-    0,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
-#else
-    1,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U, // RTS Flow Control available
+    0U, // CTS Flow Control available
+    0U, // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
+    0U, // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U, // RTS Line: 0=not available, 1=available
+    0U, // CTS Line: 0=not available, 1=available
+    0U, // DTR Line: 0=not available, 1=available
+    0U, // DSR Line: 0=not available, 1=available
+    0U, // DCD Line: 0=not available, 1=available
+    0U, // RI Line: 0=not available, 1=available
+    0U, // Signal CTS change event: \ref ARM_USART_EVENT_CTS
+    0U, // Signal DSR change event: \ref ARM_USART_EVENT_DSR
+    0U, // Signal DCD change event: \ref ARM_USART_EVENT_DCD
+    0U  // Signal RI change event: \ref ARM_USART_EVENT_RI
+#if (defined(ARM_USART_API_VERSION) && (ARM_USART_API_VERSION >= 0x203U))
+  , 0U  // Reserved bits
 #endif
-    0,  // RTS Line: 0=not available, 1=available
-    0,  // CTS Line: 0=not available, 1=available
-    0,  // DTR Line: 0=not available, 1=available
-    0,  // DSR Line: 0=not available, 1=available
-    0,  // DCD Line: 0=not available, 1=available
-    0,  // RI Line: 0=not available, 1=available
-    0,  // Signal CTS change event: \ref ARM_USART_EVENT_CTS
-    0,  // Signal DSR change event: \ref ARM_USART_EVENT_DSR
-    0,  // Signal DCD change event: \ref ARM_USART_EVENT_DCD
-    0,  // Signal RI change event: \ref ARM_USART_EVENT_RI
   },
     LPC_USART0,
     NULL,
   {     // USART Pin Configuration
+#if (RTE_USART0_TX_PIN_EN == 1)
     &USART0_pin_tx,
+#else
+    NULL,
+#endif
+#if (RTE_USART0_RX_PIN_EN == 1)
     &USART0_pin_rx,
+#else
+    NULL,
+#endif
 #if (RTE_USART0_UCLK_PIN_EN == 1)
     &USART0_pin_clk,
 #else
@@ -300,7 +341,7 @@ static const USART_RESOURCES USART0_Resources = {
     &LPC_CGU->BASE_UART0_CLK,
   },
   {    // USART Reset Configuration
-    (1 << 12),
+    (1U << 12),
     &LPC_RGU->RESET_CTRL1,
     &LPC_RGU->RESET_ACTIVE_STATUS1,
   },
@@ -317,32 +358,37 @@ static const USART_RESOURCES USART0_Resources = {
     NULL,
 #endif
     &USART0_Info,
-    USART0_SC_OVERSAMPLING_RATIO
+    USART0_SC_OVERSAMPLING_RATIO,
+    {0U,0U}
 };
 #endif
 
 // UART1
 #if (RTE_UART1)
 static USART_INFO USART1_Info = {0};
-static PIN_ID USART1_pin_tx  = { RTE_UART1_TX_PORT,   RTE_UART1_TX_BIT,  RTE_UART1_TX_FUNC };
-static PIN_ID USART1_pin_rx  = { RTE_UART1_RX_PORT,   RTE_UART1_RX_BIT,  RTE_UART1_RX_FUNC };
+#if (RTE_UART1_TX_PIN_EN == 1)
+static const PIN_ID USART1_pin_tx  = { RTE_UART1_TX_PORT,   RTE_UART1_TX_BIT,  {0U, 0U}, RTE_UART1_TX_FUNC };
+#endif
+#if (RTE_UART1_RX_PIN_EN == 1)
+static const PIN_ID USART1_pin_rx  = { RTE_UART1_RX_PORT,   RTE_UART1_RX_BIT,  {0U, 0U}, RTE_UART1_RX_FUNC };
+#endif
 #if (RTE_UART1_CTS_PIN_EN == 1)
-static PIN_ID USART1_pin_cts = { RTE_UART1_CTS_PORT,  RTE_UART1_CTS_BIT, RTE_UART1_CTS_FUNC };
+static const PIN_ID USART1_pin_cts = { RTE_UART1_CTS_PORT,  RTE_UART1_CTS_BIT, {0U, 0U}, RTE_UART1_CTS_FUNC };
 #endif
 #if (RTE_UART1_RTS_PIN_EN == 1)
-static PIN_ID USART1_pin_rts = { RTE_UART1_RTS_PORT,  RTE_UART1_RTS_BIT, RTE_UART1_RTS_FUNC };
+static const PIN_ID USART1_pin_rts = { RTE_UART1_RTS_PORT,  RTE_UART1_RTS_BIT, {0U, 0U}, RTE_UART1_RTS_FUNC };
 #endif
 #if (RTE_UART1_DCD_PIN_EN == 1)
-static PIN_ID USART1_pin_dcd = { RTE_UART1_DCD_PORT,  RTE_UART1_DCD_BIT, RTE_UART1_DCD_FUNC };
+static const PIN_ID USART1_pin_dcd = { RTE_UART1_DCD_PORT,  RTE_UART1_DCD_BIT, {0U, 0U}, RTE_UART1_DCD_FUNC };
 #endif
 #if (RTE_UART1_DSR_PIN_EN == 1)
-static PIN_ID USART1_pin_dsr = { RTE_UART1_DSR_PORT,  RTE_UART1_DSR_BIT, RTE_UART1_DSR_FUNC };
+static const PIN_ID USART1_pin_dsr = { RTE_UART1_DSR_PORT,  RTE_UART1_DSR_BIT, {0U, 0U}, RTE_UART1_DSR_FUNC };
 #endif
 #if (RTE_UART1_DTR_PIN_EN == 1)
-static PIN_ID USART1_pin_dtr = { RTE_UART1_DTR_PORT,  RTE_UART1_DTR_BIT, RTE_UART1_DTR_FUNC };
+static const PIN_ID USART1_pin_dtr = { RTE_UART1_DTR_PORT,  RTE_UART1_DTR_BIT, {0U, 0U}, RTE_UART1_DTR_FUNC };
 #endif
 #if (RTE_UART1_RI_PIN_EN == 1)
-static PIN_ID USART1_pin_ri  = { RTE_UART1_RI_PORT,   RTE_UART1_RI_BIT,  RTE_UART1_RI_FUNC };
+static const PIN_ID USART1_pin_ri  = { RTE_UART1_RI_PORT,   RTE_UART1_RI_BIT,  {0U, 0U}, RTE_UART1_RI_FUNC };
 #endif
 
 #if (RTE_UART1_DMA_TX_EN == 1)
@@ -350,6 +396,7 @@ void USART1_GPDMA_Tx_Event (uint32_t event);
 static USART_DMA USART1_DMA_Tx = {RTE_UART1_DMA_TX_CH,
                                   RTE_UART1_DMA_TX_PERI,
                                   RTE_UART1_DMA_TX_PERI_SEL,
+                                  0U,
                                   USART1_GPDMA_Tx_Event};
 #endif
 #if (RTE_UART1_DMA_RX_EN == 1)
@@ -357,90 +404,98 @@ void USART1_GPDMA_Rx_Event (uint32_t event);
 static USART_DMA USART1_DMA_Rx = {RTE_UART1_DMA_RX_CH,
                                   RTE_UART1_DMA_RX_PERI,
                                   RTE_UART1_DMA_RX_PERI_SEL,
+                                  0U,
                                   USART1_GPDMA_Rx_Event};
 #endif
 
-static const USART_RESOURCES USART1_Resources = {
+static USART_RESOURCES USART1_Resources = {
   {     // Capabilities
-    1,  // supports UART (Asynchronous) mode 
-    0,  // supports Synchronous Master mode
-    0,  // supports Synchronous Slave mode
-    0,  // supports UART Single-wire mode
-    0,  // supports UART IrDA mode
-    0,  // supports UART Smart Card mode
-    0,  // Smart Card Clock generator
+    1U, // supports UART (Asynchronous) mode 
+    0U, // supports Synchronous Master mode
+    0U, // supports Synchronous Slave mode
+    0U, // supports UART Single-wire mode
+    0U, // supports UART IrDA mode
+    0U, // supports UART Smart Card mode
+    0U, // Smart Card Clock generator
 #if (RTE_UART1_RTS_PIN_EN == 1)
-    1,  // RTS Flow Control available
+    1U, // RTS Flow Control available
 #else
-    0,  // RTS Flow Control available
+    0U, // RTS Flow Control available
 #endif
 #if (RTE_UART1_CTS_PIN_EN == 1)
-    1,  // CTS Flow Control available
+    1U, // CTS Flow Control available
 #else
-    0,  // CTS Flow Control available
+    0U, // CTS Flow Control available
 #endif
-    0,  // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
-#if ((RTE_UART1_DMA_RX_EN == 1) || (USART1_TRIG_LVL == USART_TRIG_LVL_1))
-    0,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
-#else
-    1,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
-#endif
+    0U, // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
+    0U, // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
 #if (RTE_UART1_RTS_PIN_EN == 1)
-    1,  // RTS Line: 0=not available, 1=available
+    1U, // RTS Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_CTS_PIN_EN == 1)
-    1,  // CTS Line: 0=not available, 1=available
+    1U, // CTS Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_DTR_PIN_EN == 1)
-    1,  // DTR Line: 0=not available, 1=available
+    1U, // DTR Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_DSR_PIN_EN == 1)
-    1,  // DSR Line: 0=not available, 1=available
+    1U, // DSR Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_DCD_PIN_EN == 1)
-    1,  // DCD Line: 0=not available, 1=available
+    1U, // DCD Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_RI_PIN_EN == 1)
-    1,  // RI Line: 0=not available, 1=available
+    1U, // RI Line: 0=not available, 1=available
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_CTS_PIN_EN == 1)
-    1,  // Signal CTS change event: \ref ARM_USART_EVENT_CTS
+    1U, // Signal CTS change event: \ref ARM_USART_EVENT_CTS
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_DSR_PIN_EN == 1)
-    1,  // Signal DSR change event: \ref ARM_USART_EVENT_DSR
+    1U, // Signal DSR change event: \ref ARM_USART_EVENT_DSR
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_DCD_PIN_EN == 1)
-    1,  // Signal DCD change event: \ref ARM_USART_EVENT_DCD
+    1U, // Signal DCD change event: \ref ARM_USART_EVENT_DCD
 #else
-    0,
+    0U,
 #endif
 #if (RTE_UART1_RI_PIN_EN == 1)
-    1,  // Signal RI change event: \ref ARM_USART_EVENT_RI
+    1U  // Signal RI change event: \ref ARM_USART_EVENT_RI
 #else
-    0,
+    0U
+#endif
+#if (defined(ARM_USART_API_VERSION) && (ARM_USART_API_VERSION >= 0x203U))
+  , 0U  // Reserved bits
 #endif
   },
     (LPC_USARTn_Type *)LPC_UART1,
     LPC_UART1,
   {     // USART Pin Configuration
+#if (RTE_UART1_TX_PIN_EN == 1)
     &USART1_pin_tx,
+#else
+    NULL,
+#endif
+#if (RTE_UART1_RX_PIN_EN == 1)
     &USART1_pin_rx,
+#else
+    NULL,
+#endif
     NULL,
 #if (RTE_UART1_CTS_PIN_EN == 1)
     &USART1_pin_cts,
@@ -481,7 +536,7 @@ static const USART_RESOURCES USART1_Resources = {
     &LPC_CGU->BASE_UART1_CLK,
   },
   {    // USART Reset Configuration
-    (1 << 13),
+    (1U << 13),
     &LPC_RGU->RESET_CTRL1,
     &LPC_RGU->RESET_ACTIVE_STATUS1,
   },
@@ -498,17 +553,22 @@ static const USART_RESOURCES USART1_Resources = {
     NULL,
 #endif
     &USART1_Info,
-    0
+    0,
+    {0U,0U}
 };
 #endif
 
 // USART2
 #if (RTE_USART2)
 static USART_INFO USART2_Info = {0};
-static PIN_ID USART2_pin_tx  = { RTE_USART2_TX_PORT,   RTE_USART2_TX_BIT,   RTE_USART2_TX_FUNC };
-static PIN_ID USART2_pin_rx  = { RTE_USART2_RX_PORT,   RTE_USART2_RX_BIT,   RTE_USART2_RX_FUNC };
+#if (RTE_USART2_TX_PIN_EN == 1)
+static const PIN_ID USART2_pin_tx  = { RTE_USART2_TX_PORT,   RTE_USART2_TX_BIT,   {0U, 0U}, RTE_USART2_TX_FUNC };
+#endif
+#if (RTE_USART2_RX_PIN_EN == 1)
+static const PIN_ID USART2_pin_rx  = { RTE_USART2_RX_PORT,   RTE_USART2_RX_BIT,   {0U, 0U}, RTE_USART2_RX_FUNC };
+#endif
 #if (RTE_USART2_UCLK_PIN_EN == 1)
-static PIN_ID USART2_pin_clk = { RTE_USART2_UCLK_PORT, RTE_USART2_UCLK_BIT, RTE_USART2_UCLK_FUNC };
+static const PIN_ID USART2_pin_clk = { RTE_USART2_UCLK_PORT, RTE_USART2_UCLK_BIT, {0U, 0U}, RTE_USART2_UCLK_FUNC };
 #endif
 
 #if (RTE_USART2_DMA_TX_EN == 1)
@@ -516,6 +576,7 @@ void USART2_GPDMA_Tx_Event (uint32_t event);
 static USART_DMA USART2_DMA_Tx = {RTE_USART2_DMA_TX_CH,
                                   RTE_USART2_DMA_TX_PERI,
                                   RTE_USART2_DMA_TX_PERI_SEL,
+                                  0U,
                                   USART2_GPDMA_Tx_Event};
 #endif
 #if (RTE_USART2_DMA_RX_EN == 1)
@@ -523,51 +584,59 @@ void USART2_GPDMA_Rx_Event (uint32_t event);
 static USART_DMA USART2_DMA_Rx = {RTE_USART2_DMA_RX_CH,
                                   RTE_USART2_DMA_RX_PERI,
                                   RTE_USART2_DMA_RX_PERI_SEL,
+                                  0U,
                                   USART2_GPDMA_Rx_Event};
 #endif
 
-static const USART_RESOURCES USART2_Resources = {
+static USART_RESOURCES USART2_Resources = {
   {     // Capabilities
-    1,  // supports UART (Asynchronous) mode
-#if (RTE_USART1_UCLK_PIN_EN == 1)
-    1,  // supports Synchronous Master mode
-    1,  // supports Synchronous Slave mode
-#else
-    0,  // supports Synchronous Master mode
-    0,  // supports Synchronous Slave mode
-#endif
-    1,  // supports UART Single-wire mode
-    0,  // supports UART IrDA mode
-    1,  // supports UART Smart Card mode
+    1U, // supports UART (Asynchronous) mode
 #if (RTE_USART2_UCLK_PIN_EN == 1)
-    1,  // Smart Card Clock generator
+    1U, // supports Synchronous Master mode
+    1U, // supports Synchronous Slave mode
 #else
-    0,
+    0U, // supports Synchronous Master mode
+    0U, // supports Synchronous Slave mode
 #endif
-    0,  // RTS Flow Control available
-    0,  // CTS Flow Control available
-    0,  // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
-#if ((RTE_USART2_DMA_RX_EN == 1) || (USART2_TRIG_LVL == USART_TRIG_LVL_1))
-    0,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    1U, // supports UART Single-wire mode
+    0U, // supports UART IrDA mode
+    1U, // supports UART Smart Card mode
+#if (RTE_USART2_UCLK_PIN_EN == 1)
+    1U, // Smart Card Clock generator
 #else
-    1,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U,
 #endif
-    0,  // RTS Line: 0=not available, 1=available
-    0,  // CTS Line: 0=not available, 1=available
-    0,  // DTR Line: 0=not available, 1=available
-    0,  // DSR Line: 0=not available, 1=available
-    0,  // DCD Line: 0=not available, 1=available
-    0,  // RI Line: 0=not available, 1=available
-    0,  // Signal CTS change event: \ref ARM_USART_EVENT_CTS
-    0,  // Signal DSR change event: \ref ARM_USART_EVENT_DSR
-    0,  // Signal DCD change event: \ref ARM_USART_EVENT_DCD
-    0,  // Signal RI change event: \ref ARM_USART_EVENT_RI
+    0U, // RTS Flow Control available
+    0U, // CTS Flow Control available
+    0U, // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
+    0U, // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U, // RTS Line: 0=not available, 1=available
+    0U, // CTS Line: 0=not available, 1=available
+    0U, // DTR Line: 0=not available, 1=available
+    0U, // DSR Line: 0=not available, 1=available
+    0U, // DCD Line: 0=not available, 1=available
+    0U, // RI Line: 0=not available, 1=available
+    0U, // Signal CTS change event: \ref ARM_USART_EVENT_CTS
+    0U, // Signal DSR change event: \ref ARM_USART_EVENT_DSR
+    0U, // Signal DCD change event: \ref ARM_USART_EVENT_DCD
+    0U  // Signal RI change event: \ref ARM_USART_EVENT_RI
+#if (defined(ARM_USART_API_VERSION) && (ARM_USART_API_VERSION >= 0x203U))
+  , 0U  // Reserved bits
+#endif
   },
     LPC_USART2,
     NULL,
   {     // USART Pin Configuration
+#if (RTE_USART2_TX_PIN_EN == 1)
     &USART2_pin_tx,
+#else
+    NULL,
+#endif
+#if (RTE_USART2_RX_PIN_EN == 1)
     &USART2_pin_rx,
+#else
+    NULL,
+#endif
 #if (RTE_USART2_UCLK_PIN_EN == 1)
     &USART2_pin_clk,
 #else
@@ -583,7 +652,7 @@ static const USART_RESOURCES USART2_Resources = {
     &LPC_CGU->BASE_UART2_CLK,
   },
   {    // USART Reset Configuration
-    (1 << 14),
+    (1U << 14),
     &LPC_RGU->RESET_CTRL1,
     &LPC_RGU->RESET_ACTIVE_STATUS1,
   },
@@ -600,17 +669,22 @@ static const USART_RESOURCES USART2_Resources = {
     NULL,
 #endif
     &USART2_Info,
-    USART2_SC_OVERSAMPLING_RATIO
+    USART2_SC_OVERSAMPLING_RATIO,
+    {0U,0U}
 };
 #endif
 
 // USART3
 #if (RTE_USART3)
 static USART_INFO USART3_Info = {0};
-static PIN_ID USART3_pin_tx  = { RTE_USART3_TX_PORT,   RTE_USART3_TX_BIT,   RTE_USART3_TX_FUNC };
-static PIN_ID USART3_pin_rx  = { RTE_USART3_RX_PORT,   RTE_USART3_RX_BIT,   RTE_USART3_RX_FUNC };
+#if (RTE_USART3_TX_PIN_EN == 1)
+static const PIN_ID USART3_pin_tx  = { RTE_USART3_TX_PORT,   RTE_USART3_TX_BIT,   {0U, 0U}, RTE_USART3_TX_FUNC };
+#endif
+#if (RTE_USART3_RX_PIN_EN == 1)
+static const PIN_ID USART3_pin_rx  = { RTE_USART3_RX_PORT,   RTE_USART3_RX_BIT,   {0U, 0U}, RTE_USART3_RX_FUNC };
+#endif
 #if (RTE_USART3_UCLK_PIN_EN == 1)
-static PIN_ID USART3_pin_clk = { RTE_USART3_UCLK_PORT, RTE_USART3_UCLK_BIT, RTE_USART3_UCLK_FUNC };
+static const PIN_ID USART3_pin_clk = { RTE_USART3_UCLK_PORT, RTE_USART3_UCLK_BIT, {0U, 0U}, RTE_USART3_UCLK_FUNC };
 #endif
 
 #if (RTE_USART3_DMA_TX_EN == 1)
@@ -618,6 +692,7 @@ void USART3_GPDMA_Tx_Event (uint32_t event);
 static USART_DMA USART3_DMA_Tx = {RTE_USART3_DMA_TX_CH,
                                   RTE_USART3_DMA_TX_PERI,
                                   RTE_USART3_DMA_TX_PERI_SEL,
+                                  0U,
                                   USART3_GPDMA_Tx_Event};
 #endif
 #if (RTE_USART3_DMA_RX_EN == 1)
@@ -625,51 +700,59 @@ void USART3_GPDMA_Rx_Event (uint32_t event);
 static USART_DMA USART3_DMA_Rx = {RTE_USART3_DMA_RX_CH,
                                   RTE_USART3_DMA_RX_PERI,
                                   RTE_USART3_DMA_RX_PERI_SEL,
+                                  0U,
                                   USART3_GPDMA_Rx_Event};
 #endif
 
-static const USART_RESOURCES USART3_Resources = {
+static USART_RESOURCES USART3_Resources = {
   {     // Capabilities
-    1,  // supports UART (Asynchronous) mode 
+    1U, // supports UART (Asynchronous) mode 
 #if (RTE_USART3_UCLK_PIN_EN == 1)
-    1,  // supports Synchronous Master mode
-    1,  // supports Synchronous Slave mode
+    1U, // supports Synchronous Master mode
+    1U, // supports Synchronous Slave mode
 #else
-    0,  // supports Synchronous Master mode
-    0,  // supports Synchronous Slave mode
+    0U, // supports Synchronous Master mode
+    0U, // supports Synchronous Slave mode
 #endif
-    1,  // supports UART Single-wire mode
-    1,  // supports UART IrDA mode
-    1,  // supports UART Smart Card mode
+    1U, // supports UART Single-wire mode
+    1U, // supports UART IrDA mode
+    1U, // supports UART Smart Card mode
 #if (RTE_USART3_UCLK_PIN_EN == 1)
-    1,  // Smart Card Clock generator
+    1U, // Smart Card Clock generator
 #else
-    0,
+    0U,
 #endif
-    0,  // RTS Flow Control available
-    0,  // CTS Flow Control available
-    0,  // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
-#if ((RTE_USART3_DMA_RX_EN == 1) || (USART3_TRIG_LVL == USART_TRIG_LVL_1))
-    0,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
-#else
-    1,  // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U, // RTS Flow Control available
+    0U, // CTS Flow Control available
+    0U, // Transmit completed event: \ref ARM_USART_EVENT_TX_COMPLETE
+    0U, // Signal receive character timeout event: \ref ARM_USART_EVENT_RX_TIMEOUT
+    0U, // RTS Line: 0=not available, 1=available
+    0U, // CTS Line: 0=not available, 1=available
+    0U, // DTR Line: 0=not available, 1=available
+    0U, // DSR Line: 0=not available, 1=available
+    0U, // DCD Line: 0=not available, 1=available
+    0U, // RI Line: 0=not available, 1=available
+    0U, // Signal CTS change event: \ref ARM_USART_EVENT_CTS
+    0U, // Signal DSR change event: \ref ARM_USART_EVENT_DSR
+    0U, // Signal DCD change event: \ref ARM_USART_EVENT_DCD
+    0U  // Signal RI change event: \ref ARM_USART_EVENT_RI
+#if (defined(ARM_USART_API_VERSION) && (ARM_USART_API_VERSION >= 0x203U))
+  , 0U  // Reserved bits
 #endif
-    0,  // RTS Line: 0=not available, 1=available
-    0,  // CTS Line: 0=not available, 1=available
-    0,  // DTR Line: 0=not available, 1=available
-    0,  // DSR Line: 0=not available, 1=available
-    0,  // DCD Line: 0=not available, 1=available
-    0,  // RI Line: 0=not available, 1=available
-    0,  // Signal CTS change event: \ref ARM_USART_EVENT_CTS
-    0,  // Signal DSR change event: \ref ARM_USART_EVENT_DSR
-    0,  // Signal DCD change event: \ref ARM_USART_EVENT_DCD
-    0,  // Signal RI change event: \ref ARM_USART_EVENT_RI
   },
     LPC_USART3,
     NULL,
   {     // USART Pin Configuration
+#if (RTE_USART3_TX_PIN_EN == 1)
     &USART3_pin_tx,
+#else
+    NULL,
+#endif
+#if (RTE_USART3_RX_PIN_EN == 1)
     &USART3_pin_rx,
+#else
+    NULL,
+#endif
 #if (RTE_USART3_UCLK_PIN_EN == 1)
     &USART3_pin_clk,
 #else
@@ -685,7 +768,7 @@ static const USART_RESOURCES USART3_Resources = {
     &LPC_CGU->BASE_UART3_CLK,
   },
   {    // USART Reset Configuration
-    (1 << 15),
+    (1U << 15),
     &LPC_RGU->RESET_CTRL1,
     &LPC_RGU->RESET_ACTIVE_STATUS1,
   },
@@ -702,7 +785,8 @@ static const USART_RESOURCES USART3_Resources = {
     NULL,
 #endif
     &USART3_Info,
-    USART3_SC_OVERSAMPLING_RATIO
+    USART3_SC_OVERSAMPLING_RATIO,
+    {0U,0U}
 };
 #endif
 
@@ -721,8 +805,7 @@ extern uint32_t GetClockFreq (uint32_t clk_src);
    - \b  0: function succeeded
    - \b -1: function failed
 */
-int32_t USART_SetBaudrate (uint32_t         baudrate,
-                           USART_RESOURCES *usart) {
+int32_t USART_SetBaudrate (uint32_t baudrate, USART_RESOURCES *usart) {
   uint8_t  add, mul, add_mul_best, oversampling_fract_best;
   uint16_t latch_div_best, oversampling, oversampling_best;
   uint32_t i, j, pclk, div, tmp_div, latch_div, delta, delta_best, val;
@@ -734,6 +817,10 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
 
   delta_best              = 0xFFFFFFFFU;
   oversampling_fract_best = 0U;
+  add_mul_best            = 0U;
+  latch_div_best          = 0U;
+  oversampling            = 0U;
+  oversampling_best       = 0U;
 
   // SmartCard mode
   if (usart->info->mode == ARM_USART_MODE_SMART_CARD) {
@@ -761,7 +848,7 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
         if (delta < delta_best) {
           delta_best        = delta;
           add_mul_best      = fract_div_lookup_table[i].add_mul;
-          latch_div_best    = latch_div;
+          latch_div_best    = latch_div & 0xFFFFU;
         }
         latch_div++;
       }
@@ -770,51 +857,49 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
 
     // Oversampling is fixed to 16
     // divider = oversampling * latch divider * fractional divider = 16 * latch_div * fract_div
-    if (div >= FIXED_OVERSAMPLING_DIVIDER_LIMIT) {
-      latch_div = div >> (FRACT_BITS + 4U);
-      if ((div == (latch_div << (FRACT_BITS + 4U))) && ((latch_div >> 4) <= 0xFFFFU)) {
-        // Fractional part of divider is 0
-        delta_best        = 0U;
-        add_mul_best      = 0U;
-        latch_div_best    = latch_div;
-        oversampling_best = 16U;
-      } else {
-        // Divider larger than 48, can be accomplished with configurable
-        // latch and fractional divider, and fixed oversampling to 16
+    // check if divider value is integer (no fractional part)
+    latch_div = div >> (FRACT_BITS + 4U);
+    if ((div == (latch_div << (FRACT_BITS + 4U))) && ((latch_div >> 4) <= 0xFFFFU)) {
+      // Fractional part of divider is 0
+      delta_best        = 0U;
+      add_mul_best      = 0U;
+      latch_div_best    = latch_div & 0xFFFFU;
+      oversampling_best = 16U;
+    } else if (div >= FIXED_OVERSAMPLING_DIVIDER_LIMIT) {
+      // Divider larger than 48, can be accomplished with configurable
+      // latch and fractional divider, and fixed oversampling to 16
 
-        for (i = 0U; i < FRACT_DIV_LOOKUP_TABLE_SZ; i++) {
-          // Calculate latch divider (latch_div = div / (fract_div * oversampling(16)))
-          latch_div = ((div / fract_div_lookup_table[i].val) >> 4);
+      for (i = 0U; i < FRACT_DIV_LOOKUP_TABLE_SZ; i++) {
+        // Calculate latch divider (latch_div = div / (fract_div * oversampling(16)))
+        latch_div = ((div / fract_div_lookup_table[i].val) >> 4);
 
-          if (latch_div > 65535U) { continue; }
+        if (latch_div > 65535U) { continue; }
 
-          for (j = 0U; j < 2U; j++) {
-            // Which latch divider value is more appropriate: 
-            //    latch_div or latch_div + 1 (rounded up)
+        for (j = 0U; j < 2U; j++) {
+          // Which latch divider value is more appropriate: 
+          //    latch_div or latch_div + 1 (rounded up)
 
-            if (latch_div < 3U) { latch_div++; continue; }
+          if (latch_div < 3U) { latch_div++; continue; }
 
-            // Calculate actual divider (temp_div = latch_div * fract_div * oversampling(16))
-            tmp_div   = (latch_div * fract_div_lookup_table[i].val) << 4;
+          // Calculate actual divider (temp_div = latch_div * fract_div * oversampling(16))
+          tmp_div   = (latch_div * fract_div_lookup_table[i].val) << 4;
 
-            // Calculate delta
-            if (div > tmp_div) { delta = div - tmp_div; }
-            else               { delta = tmp_div - div; }
+          // Calculate delta
+          if (div > tmp_div) { delta = div - tmp_div; }
+          else               { delta = tmp_div - div; }
 
-            // Check if delta is better than best delta
-            if (delta < delta_best) {
-              delta_best        = delta;
-              add_mul_best      = fract_div_lookup_table[i].add_mul;
-              latch_div_best    = latch_div;
-              oversampling_best = 16U;
-            }
-            latch_div++;
+          // Check if delta is better than best delta
+          if (delta < delta_best) {
+            delta_best        = delta;
+            add_mul_best      = fract_div_lookup_table[i].add_mul;
+            latch_div_best    = latch_div & 0xFFFFU;
+            oversampling_best = 16U;
           }
+          latch_div++;
         }
       }
-    } else {
-      // Check if oversampling register is available
-      if (usart->uart_reg != NULL) {return - 1; }
+    } else if (usart->uart_reg == NULL) {
+      // Oversampling register is available
 
       if (div > INTEGER_OVERSAMPLING_DIVIDER_LIMIT) {
         // Oversampling ratio is integer value
@@ -839,7 +924,7 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
           // Fractional part of divider is 0
           delta_best        = 0U;
           add_mul_best      = 0U;
-          latch_div_best    = tmp_div >> FRACT_BITS;
+          latch_div_best    = (tmp_div >> FRACT_BITS) & 0xFFFFU;
           oversampling_best = oversampling;
         } else {
           // Fractional part of divider is not 0
@@ -859,7 +944,7 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
             if (delta < delta_best) {
               delta_best        = delta;
               add_mul_best      = fract_div_lookup_table[i].add_mul;
-              latch_div_best    = latch_div;
+              latch_div_best    = latch_div & 0xFFFFU;
               oversampling_best = oversampling;
             }
           }
@@ -868,7 +953,7 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
         //tmp_div = latch_div_best * fract_best * oversampling_best;
         add = add_mul_best & 0x0FU;
         mul = add_mul_best >> 4;
-        tmp_div = ((latch_div_best * (mul + add) * oversampling_best) << 12) / mul;
+        tmp_div = (uint32_t)(((latch_div_best * (mul + add) * oversampling_best) << 12) / mul);
         if ((tmp_div & FRACT_MASK) == 0U) {
           // If best possible divider is integer value, make sure
           // fractional divider is 0 and max oversampling is used
@@ -880,7 +965,7 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
 
               tmp_div /= oversampling;
               add_mul_best      = 0U;
-              latch_div_best    = tmp_div >> FRACT_BITS;
+              latch_div_best    = (tmp_div >> FRACT_BITS) & 0xFFFFU;
               oversampling_best = oversampling;
               break;
             }
@@ -910,9 +995,11 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
           oversampling -= val;
         } while (oversampling >= (4U << FRACT_BITS));
 
-        oversampling_fract_best = ((oversampling_best & FRACT_MASK) << 3) >> FRACT_BITS;
-        oversampling_best       =   oversampling_best >> FRACT_BITS;
+        oversampling_fract_best = (((oversampling_best & FRACT_MASK) << 3) >> FRACT_BITS) & 0x07U;
+        oversampling_best       =   (oversampling_best >> FRACT_BITS) & 0x0FU;
       }
+    } else {
+      return -1;
     }
   }
 
@@ -928,8 +1015,8 @@ int32_t USART_SetBaudrate (uint32_t         baudrate,
 
   // Check if oversampling register is available
   if (usart->uart_reg == NULL) {
-    usart->reg->OSR = ((oversampling_best - 1)  << USART_OSR_OSINT_POS) |
-                      ( oversampling_fract_best << USART_OSR_OSFRAC_POS);
+    usart->reg->OSR = (uint32_t)(((oversampling_best - 1)  << USART_OSR_OSINT_POS) |
+                                 ( oversampling_fract_best << USART_OSR_OSFRAC_POS));
   }
 
   usart->info->baudrate = baudrate;
@@ -975,14 +1062,71 @@ static uint32_t USART_RxLineIntHandler (USART_RESOURCES *usart) {
   }
 
   // Framing error
-  else {
-    if(lsr & USART_LSR_FE) {
-      usart->info->rx_status.rx_framing_error = 1U;
-      event |= ARM_USART_EVENT_RX_FRAMING_ERROR;
-    }
+  if(lsr & USART_LSR_FE) {
+    usart->info->rx_status.rx_framing_error = 1U;
+    event |= ARM_USART_EVENT_RX_FRAMING_ERROR;
   }
 
   return event;
+}
+
+/**
+  \fn          void USART_PIN_Configure (USART_RESOURCES  *usart)
+  \brief       Configure USART Rx and TX pin
+  \param[in]   usart     Pointer to USART resources
+*/
+static void USART_PIN_Configure (USART_RESOURCES  *usart) {
+
+  switch (usart->info->mode) {
+    case ARM_USART_MODE_ASYNCHRONOUS:
+    case ARM_USART_MODE_SYNCHRONOUS_MASTER:
+    case ARM_USART_MODE_SYNCHRONOUS_SLAVE:
+    case ARM_USART_MODE_IRDA:
+      if (usart->info->flags & USART_FLAG_RX_ENABLED) {
+        // USART RX pin function selected
+        SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num,
+                         SCU_PIN_CFG_INPUT_BUFFER_EN | SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(usart->pins.rx->config_val));
+      }
+      else {
+        // GPIO pin function selected
+        SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
+      }
+
+      if (usart->info->flags & USART_FLAG_TX_ENABLED) {
+        // USART TX pin function selected
+        SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num,
+                         SCU_PIN_CFG_INPUT_BUFFER_EN | SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(usart->pins.tx->config_val));	
+      }
+      else {
+        // GPIO pin function selected
+        SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
+      }
+      break;
+    case ARM_USART_MODE_SINGLE_WIRE:
+    case ARM_USART_MODE_SMART_CARD:
+      if( (usart->info->flags & USART_FLAG_RX_ENABLED) ||
+          (usart->info->flags & USART_FLAG_TX_ENABLED) ) {
+        // GPIO pin function selected
+        SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
+        // USART TX pin function selected
+        SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num,
+                         SCU_PIN_CFG_INPUT_BUFFER_EN | SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(usart->pins.tx->config_val));
+      }
+      else {
+        // GPIO pin function selected
+        SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
+        SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
+                         SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
+      }
+      break;
+  }
 }
 
 // Function Prototypes
@@ -1037,8 +1181,8 @@ static int32_t USART_Initialize (ARM_USART_SignalEvent_t  cb_event,
   usart->info->rx_status.rx_framing_error = 0U;
   usart->info->rx_status.rx_parity_error  = 0U;
 
-  usart->info->xfer.send_active           = 0U;
-  usart->info->xfer.tx_def_val            = 0U;
+  // Clear transfer information
+  memset((void *)&usart->info->xfer, 0, sizeof(USART_TRANSFER_INFO));
 
   // Configure CTS pin
   if (usart->capabilities.cts) {
@@ -1096,11 +1240,20 @@ static int32_t USART_Initialize (ARM_USART_SignalEvent_t  cb_event,
 */
 static int32_t USART_Uninitialize (USART_RESOURCES *usart) {
 
+  if ((usart->info->flags & USART_FLAG_POWERED) != 0U) {
+    // If peripheral is powered, power off the peripheral
+    (void)USART_PowerControl(ARM_POWER_OFF, usart);
+  }
+
   // Reset TX pin configuration
-  SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num  , 0U);
+  if (usart->pins.tx) {
+    SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num  , 0U);
+  }
 
   // Reset RX pin configuration
-  SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num  , 0U);
+  if (usart->pins.rx) {
+    SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num  , 0U);
+  }
 
   // Reset CLK pin configuration
   if (usart->pins.clk) {
@@ -1138,7 +1291,11 @@ static int32_t USART_Uninitialize (USART_RESOURCES *usart) {
   }
 
   // DMA Uninitialize
-  if (usart->dma_tx || usart->dma_rx) { GPDMA_Uninitialize (); }
+  if (usart->dma_tx || usart->dma_rx) {
+    GPDMA_Uninitialize ();
+    GPDMA_Initialize ();
+    GPDMA_Uninitialize ();
+  }
 
   // Reset USART status flags
   usart->info->flags = 0U;
@@ -1155,12 +1312,26 @@ static int32_t USART_Uninitialize (USART_RESOURCES *usart) {
 */
 static int32_t USART_PowerControl (ARM_POWER_STATE  state,
                                    USART_RESOURCES *usart) {
-  uint32_t val;
+  uint32_t val, tout_cnt;
+
+  if ((usart->info->flags & USART_FLAG_INITIALIZED) == 0U) {
+    return ARM_DRIVER_ERROR;
+  }
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
+      USART_Control (ARM_USART_ABORT_SEND,     0U, usart);
+      USART_Control (ARM_USART_ABORT_RECEIVE,  0U, usart);
+      USART_Control (ARM_USART_ABORT_TRANSFER, 0U, usart);
+
       // Disable USART IRQ
-      NVIC_DisableIRQ(usart->irq_num);
+      NVIC_DisableIRQ( (IRQn_Type) usart->irq_num);
 
       // If DMA mode - disable TX DMA channel
       if ((usart->dma_tx) && (usart->info->xfer.send_active != 0U)) {
@@ -1174,18 +1345,36 @@ static int32_t USART_PowerControl (ARM_POWER_STATE  state,
 
       // Reset USART peripheral
       *usart->rst.reg_cfg = (usart->rst.reg_cfg_val | (~(*(usart->rst.reg_stat))));
-      while ((*(usart->rst.reg_stat) & usart->rst.reg_cfg_val) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((*(usart->rst.reg_stat) & usart->rst.reg_cfg_val) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
 
       // Disable USART peripheral clock
       *usart->clk.peri_cfg &= ~1U;
-      while (*usart->clk.peri_cfg & 1U);
+      tout_cnt = LOOP_MAX_CNT;
+      while (*usart->clk.peri_cfg & 1U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
         
       // Disable USART register interface clock
       *usart->clk.reg_cfg &= ~1U;
-      while (*usart->clk.reg_cfg & 1U);
+      tout_cnt = LOOP_MAX_CNT;
+      while (*usart->clk.reg_cfg & 1U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
 
       // Clear pending USART interrupts in NVIC
-      NVIC_ClearPendingIRQ(usart->irq_num);
+      NVIC_ClearPendingIRQ( (IRQn_Type) usart->irq_num);
 
       // Clear driver variables
       usart->info->rx_status.rx_busy          = 0U;
@@ -1193,9 +1382,11 @@ static int32_t USART_PowerControl (ARM_POWER_STATE  state,
       usart->info->rx_status.rx_break         = 0U;
       usart->info->rx_status.rx_framing_error = 0U;
       usart->info->rx_status.rx_parity_error  = 0U;
-      usart->info->xfer.send_active           = 0U;
 
-      usart->info->flags &= ~USART_FLAG_POWERED;
+      // Clear transfer information
+      memset((void *)&usart->info->xfer, 0, sizeof(USART_TRANSFER_INFO));
+
+      usart->info->flags &= ~(USART_FLAG_POWERED | USART_FLAG_CONFIGURED);
       break;
 
     case ARM_POWER_LOW:
@@ -1211,15 +1402,33 @@ static int32_t USART_PowerControl (ARM_POWER_STATE  state,
 
       // Enable USART register interface clock
       *usart->clk.reg_cfg |= CCU_CLK_CFG_AUTO | CCU_CLK_CFG_RUN;
-      while ((*usart->clk.reg_cfg & CCU_CLK_CFG_RUN) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((*usart->clk.reg_cfg & CCU_CLK_CFG_RUN) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Enable USART peripheral clock
       *usart->clk.peri_cfg |= CCU_CLK_CFG_AUTO | CCU_CLK_CFG_RUN;
-      while (( *usart->clk.peri_cfg & CCU_CLK_CFG_RUN) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while (( *usart->clk.peri_cfg & CCU_CLK_CFG_RUN) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Reset USART peripheral
       *usart->rst.reg_cfg = (usart->rst.reg_cfg_val | (~(*(usart->rst.reg_stat))));
-      while ((*(usart->rst.reg_stat) & usart->rst.reg_cfg_val) == 0U);
+      tout_cnt = LOOP_MAX_CNT;
+      while ((*(usart->rst.reg_stat) & usart->rst.reg_cfg_val) == 0U) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       // Disable transmitter
       usart->reg->TER &= ~USART_TER_TXEN;
@@ -1264,12 +1473,8 @@ static int32_t USART_PowerControl (ARM_POWER_STATE  state,
       usart->info->flags = USART_FLAG_POWERED | USART_FLAG_INITIALIZED;
 
       // Clear and Enable USART IRQ
-      NVIC_ClearPendingIRQ(usart->irq_num);
-      NVIC_EnableIRQ(usart->irq_num);
-
-      break;
-
-    default: return ARM_DRIVER_ERROR_UNSUPPORTED;
+      NVIC_ClearPendingIRQ( (IRQn_Type) usart->irq_num);
+      NVIC_EnableIRQ( (IRQn_Type) usart->irq_num);
   }
   return ARM_DRIVER_OK;
 }
@@ -1287,7 +1492,8 @@ static int32_t USART_PowerControl (ARM_POWER_STATE  state,
 static int32_t USART_Send (const void            *data,
                                  uint32_t         num,
                                  USART_RESOURCES *usart) {
-  int32_t stat, source_inc, val;
+  int32_t  stat;
+  uint32_t source_inc, event;
 
   if ((data == NULL) || (num == 0U)) {
     // Invalid parameters
@@ -1316,6 +1522,7 @@ static int32_t USART_Send (const void            *data,
     if (usart->info->xfer.sync_mode == 0U) {
       usart->info->xfer.sync_mode = USART_SYNC_MODE_TX;
       // Start dummy reads
+      USART_Control (ARM_USART_CONTROL_RX, 1U, usart);
       stat = USART_Receive (&usart->info->xfer.rx_dump_val, num, usart);
       if (stat != ARM_DRIVER_OK) { return ARM_DRIVER_ERROR; }
 
@@ -1328,7 +1535,7 @@ static int32_t USART_Send (const void            *data,
   }
 
   // Save transmit buffer info
-  usart->info->xfer.tx_buf = (uint8_t *)data;
+  usart->info->xfer.tx_buf = (uint8_t *)(uint32_t)data;
   usart->info->xfer.tx_num = num;
   usart->info->xfer.tx_cnt = 0U;
 
@@ -1363,14 +1570,36 @@ static int32_t USART_Send (const void            *data,
   } else {
     // Fill TX FIFO
     if (usart->reg->LSR & USART_LSR_THRE) {
-      val = 16U;
-      while ((val--) && (usart->info->xfer.tx_cnt != usart->info->xfer.tx_num)) {
-        usart->reg->THR = usart->info->xfer.tx_buf[usart->info->xfer.tx_cnt++];
-      }
+      usart->info->xfer.tx_fifo_level = 0U;
     }
+    while ((usart->info->xfer.tx_fifo_level < 16U) && (usart->info->xfer.tx_cnt != usart->info->xfer.tx_num)) {
+      usart->reg->THR = usart->info->xfer.tx_buf[usart->info->xfer.tx_cnt++];
+      usart->info->xfer.tx_fifo_level++;
+    }
+    if (usart->info->xfer.tx_cnt == usart->info->xfer.tx_num) {
+      // Clear TX busy flag
+      usart->info->xfer.send_active = 0U;
 
-    // Enable transmit holding register empty interrupt
-    usart->reg->IER |= USART_IER_THREIE;
+      event = 0U;
+
+      // Set send complete event
+      if ((usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_MASTER) ||
+          (usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_SLAVE )) {
+        if ((usart->info->xfer.sync_mode == USART_SYNC_MODE_TX)    &&
+            ((usart->info->flags & USART_FLAG_RX_ENABLED) == 0U)) {
+          event = ARM_USART_EVENT_SEND_COMPLETE;
+        }
+      } else {
+        event = ARM_USART_EVENT_SEND_COMPLETE;
+      }
+
+      if ((usart->info->cb_event != NULL) && (event != 0U)) {
+        usart->info->cb_event (event);
+      }
+    } else {
+      // Enable transmit holding register empty interrupt
+      usart->reg->IER |= USART_IER_THREIE;
+    }
   }
 
   return ARM_DRIVER_OK;
@@ -1390,7 +1619,8 @@ static int32_t USART_Receive (void            *data,
                               uint32_t         num,
                               USART_RESOURCES *usart) {
 
-  int32_t stat, dest_inc;
+  int32_t  stat;
+  uint32_t dest_inc;
 
   if ((data == NULL) || (num == 0U)) {
     // Invalid parameters
@@ -1456,7 +1686,7 @@ static int32_t USART_Receive (void            *data,
                                    GPDMA_CH_CONFIG_ITC                                      |
                                    GPDMA_CH_CONFIG_E,
                                    usart->dma_rx->cb_event);
-  if (stat == -1) { return ARM_DRIVER_ERROR; }
+    if (stat == -1) { return ARM_DRIVER_ERROR; }
 
   // Interrupt mode
   } else {
@@ -1470,6 +1700,7 @@ static int32_t USART_Receive (void            *data,
     if (usart->info->xfer.sync_mode == 0U) {
       usart->info->xfer.sync_mode = USART_SYNC_MODE_RX;
       // Send dummy data
+      USART_Control (ARM_USART_CONTROL_TX, 1U, usart);
       stat = USART_Send (&usart->info->xfer.tx_def_val, num, usart);
       if (stat != ARM_DRIVER_OK) { return ARM_DRIVER_ERROR; }
     }
@@ -1576,8 +1807,9 @@ static uint32_t USART_GetRxCount (USART_RESOURCES *usart) {
 static int32_t USART_Control (uint32_t          control,
                               uint32_t          arg,
                               USART_RESOURCES  *usart) {
-  uint32_t val, mode;
-  uint32_t syncctrl, hden, icr, scictrl, lcr, mcr;
+  uint8_t  mode;
+  uint32_t val, syncctrl, hden, icr, scictrl, lcr, mcr = 0U;
+  uint32_t cnt;
 
   if ((usart->info->flags & USART_FLAG_POWERED) == 0U) {
     // USART not powered
@@ -1593,52 +1825,30 @@ static int32_t USART_Control (uint32_t          control,
   switch (control & ARM_USART_CONTROL_Msk) {
     // Control TX
     case ARM_USART_CONTROL_TX:
-      // Check if TX line available
-      if (usart->pins.tx == NULL) { return ARM_DRIVER_ERROR; }
       if (arg) {
-        if (usart->info->mode != ARM_USART_MODE_SMART_CARD) {
-          // USART TX pin function selected
-          SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
-                           SCU_PIN_CFG_MODE(usart->pins.tx->config_val));
-        }
         usart->info->flags |= USART_FLAG_TX_ENABLED;
+        USART_PIN_Configure (usart);
         usart->reg->TER    |= USART_TER_TXEN;
       } else {
         usart->info->flags &= ~USART_FLAG_TX_ENABLED;
         usart->reg->TER &= ~USART_TER_TXEN;
-        if (usart->info->mode != ARM_USART_MODE_SMART_CARD) {
-          // GPIO pin function selected
-          SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
-                           SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
-        }
+        USART_PIN_Configure (usart);
       }
       return ARM_DRIVER_OK;
 
     // Control RX
     case ARM_USART_CONTROL_RX:
-      if (usart->pins.rx == NULL) { return ARM_DRIVER_ERROR; }
       // RX Line interrupt enable (overrun, framing, parity error, break)
       if (arg) {
-        if ((usart->info->mode != ARM_USART_MODE_SMART_CARD)   &&
-            (usart->info->mode != ARM_USART_MODE_SINGLE_WIRE )) {
-          // USART RX pin function selected
-          SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num,
-                           SCU_PIN_CFG_INPUT_BUFFER_EN | SCU_PIN_CFG_INPUT_FILTER_DIS |
-                           SCU_PIN_CFG_MODE(usart->pins.rx->config_val));
-        }
         usart->info->flags |= USART_FLAG_RX_ENABLED;
         usart->reg->RS485CTRL &= ~USART_RS485CTRL_RXDIS;
+        USART_PIN_Configure (usart);
         usart->reg->IER |= USART_IER_RXIE;
       } else {
         usart->info->flags &= ~USART_FLAG_RX_ENABLED;
         usart->reg->RS485CTRL |= USART_RS485CTRL_RXDIS;
         usart->reg->IER &= ~USART_IER_RXIE;
-        if ((usart->info->mode != ARM_USART_MODE_SMART_CARD)   &&
-            (usart->info->mode != ARM_USART_MODE_SINGLE_WIRE )) {
-          // GPIO pin function selected
-          SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num, SCU_PIN_CFG_INPUT_FILTER_DIS |
-                           SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0));
-        }
+        USART_PIN_Configure (usart);
       }
       return ARM_DRIVER_OK;
 
@@ -1680,6 +1890,25 @@ static int32_t USART_Control (uint32_t          control,
         GPDMA_ChannelDisable (usart->dma_tx->channel);
       }
 
+      if (usart->info->xfer.send_active != 0U) {
+        if ((usart->reg->LSR & USART_LSR_TEMT) == 0U) {
+          // If transmit is in progess, wait for it to finish
+          cnt = 2000000U;
+          while (((usart->reg->LSR & USART_LSR_TEMT) == 0U) && (cnt-- != 0U));
+        }
+      }
+
+      // Synchronous mode
+      if ((usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_MASTER) ||
+          (usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_SLAVE )) {
+        if (usart->info->xfer.sync_mode == USART_SYNC_MODE_TX) {
+          usart->info->xfer.sync_mode = 0U;
+          // Abort receive also
+          USART_Control (ARM_USART_ABORT_RECEIVE, 0U, usart);
+          USART_Control (ARM_USART_CONTROL_RX, 0U, usart);
+        }
+      }
+
       // Clear Send active flag
       usart->info->xfer.send_active = 0U;
       return ARM_DRIVER_OK;
@@ -1703,6 +1932,17 @@ static int32_t USART_Control (uint32_t          control,
       // If DMA mode - disable DMA channel
       if ((usart->dma_rx) && (usart->info->rx_status.rx_busy)) {
         GPDMA_ChannelDisable (usart->dma_rx->channel);
+      }
+
+      // Synchronous mode
+      if ((usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_MASTER) ||
+          (usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_SLAVE )) {
+        if (usart->info->xfer.sync_mode == USART_SYNC_MODE_RX) {
+          usart->info->xfer.sync_mode = 0U;
+          // Abort send also
+          USART_Control (ARM_USART_ABORT_SEND, 0U, usart);
+          USART_Control (ARM_USART_CONTROL_TX, 0U, usart);
+        }
       }
 
       // Clear RX busy status
@@ -1732,6 +1972,17 @@ static int32_t USART_Control (uint32_t          control,
       // Transmit and receive FIFO reset
       val |= USART_FCR_TXFIFORES | USART_FCR_RXFIFORES;
       usart->reg->FCR = val;
+
+      if (usart->info->xfer.send_active != 0U) {
+        if ((usart->reg->LSR & USART_LSR_TEMT) == 0U) {
+          // If transmit is in progess, wait for it to finish
+          cnt = 2000000U;
+          while (((usart->reg->LSR & USART_LSR_TEMT) == 0U) && (cnt-- != 0U));
+        }
+      }
+
+      // Clear sync_mode
+      usart->info->xfer.sync_mode = 0U;
 
       // Clear busy statuses
       usart->info->rx_status.rx_busy = 0U;
@@ -1781,7 +2032,7 @@ static int32_t USART_Control (uint32_t          control,
 
     // Default TX value
     case ARM_USART_SET_DEFAULT_TX_VALUE:
-      usart->info->xfer.tx_def_val = arg;
+      usart->info->xfer.tx_def_val = arg & 0xFFU;
       return ARM_DRIVER_OK;
 
     // IrDA pulse
@@ -1809,7 +2060,7 @@ static int32_t USART_Control (uint32_t          control,
     // SmartCard guard time
     case ARM_USART_SET_SMART_CARD_GUARD_TIME:
       if (usart->capabilities.smart_card) {
-        if (arg > 0xFF) { return ARM_DRIVER_ERROR; }
+        if (arg > 0xFFU) { return ARM_DRIVER_ERROR; }
         usart->reg->SCICTRL &= ~USART_SCICTRL_GUARDTIME_MSK;
         usart->reg->SCICTRL |= (arg << USART_SCICTRL_GUARDTIME_POS);
       } else { return ARM_DRIVER_ERROR; }
@@ -1820,7 +2071,7 @@ static int32_t USART_Control (uint32_t          control,
       if (usart->capabilities.smart_card == 0U) { return ARM_DRIVER_ERROR; }
       if (arg == 0U)                            { return ARM_DRIVER_OK;    }
       if (usart->capabilities.smart_card_clock) {
-        if ((usart->info->baudrate * usart->sc_oversamp) != arg) {
+        if ((usart->info->baudrate * (uint32_t) usart->sc_oversamp) != arg) {
           return ARM_DRIVER_ERROR;
         }
       } else { return ARM_DRIVER_ERROR; }
@@ -1925,46 +2176,8 @@ static int32_t USART_Control (uint32_t          control,
   // Configuration is OK - Mode is valid
   usart->info->mode = mode;
 
-  // Configure TX pin regarding mode and transmitter state
-  val = SCU_PIN_CFG_INPUT_FILTER_DIS;
-  switch (usart->info->mode) {
-    case ARM_USART_MODE_SMART_CARD:
-      // Pin function = USART TX
-      val |= SCU_PIN_CFG_MODE(usart->pins.tx->config_val);
-      break;
-    default:
-      // Synchronous master/slave, asynchronous, single-wire and IrDA mode
-      if (usart->info->flags & USART_FLAG_TX_ENABLED) {
-        // Pin function = USART TX
-        val |= SCU_PIN_CFG_MODE(usart->pins.tx->config_val);
-      } else {
-        // Pin function = GPIO
-        val |= SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0);
-      }
-  }
-  SCU_PinConfigure(usart->pins.tx->port, usart->pins.tx->num, val);
-
-  // Configure RX pin regarding mode and receiver state
-  val = SCU_PIN_CFG_INPUT_FILTER_DIS;
-  switch (usart->info->mode) {
-    case ARM_USART_MODE_SINGLE_WIRE:
-    case ARM_USART_MODE_SMART_CARD:
-      // Pin function = GPIO
-      val |= SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0);
-      break;
-    default:
-      // Synchronous master/slave, asynchronous and  IrDA mode
-      if (usart->info->flags & USART_FLAG_RX_ENABLED) {
-        // Pin function = USART RX
-        val |= SCU_PIN_CFG_INPUT_BUFFER_EN | 
-               SCU_PIN_CFG_MODE(usart->pins.rx->config_val);
-      } else {
-        // Pin function = GPIO
-        val |= SCU_PIN_CFG_MODE(SCU_CFG_MODE_FUNC0);
-      }
-      break;
-  }
-  SCU_PinConfigure(usart->pins.rx->port, usart->pins.rx->num, val);
+  // Configure RX pin and TX pin regarding mode and transmitter/receiver state
+  USART_PIN_Configure (usart);
 
   // Configure CLK pin regarding mode
   if (usart->pins.clk) {
@@ -2015,7 +2228,7 @@ static int32_t USART_Control (uint32_t          control,
 
   // Configure MCR register (modem line for USART1)
   if (usart->uart_reg) {
-    usart->uart_reg->MCR = ((usart->uart_reg->MCR & ~(UART_MCR_RTSEN |
+    usart->uart_reg->MCR = ((usart->uart_reg->MCR & ~(UART_MCR_RTSEN | UART_MCR_RTSCTRL |
                              UART_MCR_CTSEN))) | mcr;
   }
 
@@ -2035,15 +2248,18 @@ static int32_t USART_Control (uint32_t          control,
   \return      USART status \ref ARM_USART_STATUS
 */
 static ARM_USART_STATUS USART_GetStatus (USART_RESOURCES *usart) {
-  ARM_USART_STATUS stat;
+  ARM_USART_STATUS stat = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
-  stat.tx_busy          = (usart->reg->LSR & USART_LSR_TEMT ? (0U) : (1U));
-  stat.rx_busy          = usart->info->rx_status.rx_busy;
-  stat.tx_underflow     = 0U;
-  stat.rx_overflow      = usart->info->rx_status.rx_overflow;
-  stat.rx_break         = usart->info->rx_status.rx_break;
-  stat.rx_framing_error = usart->info->rx_status.rx_framing_error;
-  stat.rx_parity_error  = usart->info->rx_status.rx_parity_error;
+  if ((usart->info->flags & USART_FLAG_POWERED) != 0U) {
+    stat.tx_busy          = (usart->reg->LSR & USART_LSR_TEMT ? (0U) : (1U));
+    stat.rx_busy          = usart->info->rx_status.rx_busy;
+    stat.tx_underflow     = 0U;
+    stat.rx_overflow      = usart->info->rx_status.rx_overflow;
+    stat.rx_break         = usart->info->rx_status.rx_break;
+    stat.rx_framing_error = usart->info->rx_status.rx_framing_error;
+    stat.rx_parity_error  = usart->info->rx_status.rx_parity_error;
+  }
+
   return stat;
 }
 
@@ -2092,7 +2308,7 @@ static int32_t USART_SetModemControl (ARM_USART_MODEM_CONTROL  control,
   \return      modem status \ref ARM_USART_MODEM_STATUS
 */
 static ARM_USART_MODEM_STATUS USART_GetModemStatus (USART_RESOURCES *usart) {
-  ARM_USART_MODEM_STATUS modem_status;
+  ARM_USART_MODEM_STATUS modem_status = { 0U, 0U, 0U, 0U, 0U };
   uint32_t msr;
 
   if (usart->uart_reg &&
@@ -2100,19 +2316,10 @@ static ARM_USART_MODEM_STATUS USART_GetModemStatus (USART_RESOURCES *usart) {
 
     msr = usart->uart_reg->MSR;
 
-    if (usart->capabilities.cts) { modem_status.cts = (msr & UART_MSR_CTS ? (1U) : (0U)); }
-    else                         { modem_status.cts = 0U; }
-    if (usart->capabilities.dsr) { modem_status.dsr = (msr & UART_MSR_DSR ? (1U) : (0U)); }
-    else                         { modem_status.dsr = 0U; }
-    if (usart->capabilities.ri ) { modem_status.ri  = (msr & UART_MSR_RI  ? (1U) : (0U)); }
-    else                         { modem_status.ri  = 0U; }
-    if (usart->capabilities.dcd) { modem_status.dcd = (msr & UART_MSR_DCD ? (1U) : (0U)); }
-    else                         { modem_status.dcd = 0U; }
-  } else {
-     modem_status.cts = 0U;
-     modem_status.dsr = 0U;
-     modem_status.ri  = 0U;
-     modem_status.dcd = 0U;
+    if (usart->capabilities.cts) { modem_status.cts = ((msr & UART_MSR_CTS) ? (0U) : (1U)); }
+    if (usart->capabilities.dsr) { modem_status.dsr = ((msr & UART_MSR_DSR) ? (0U) : (1U)); }
+    if (usart->capabilities.ri ) { modem_status.ri  = ((msr & UART_MSR_RI ) ? (0U) : (1U)); }
+    if (usart->capabilities.dcd) { modem_status.dcd = ((msr & UART_MSR_DCD) ? (0U) : (1U)); }
   }
 
   return modem_status;
@@ -2124,7 +2331,7 @@ static ARM_USART_MODEM_STATUS USART_GetModemStatus (USART_RESOURCES *usart) {
   \param[in]   usart     Pointer to USART resources
 */
 static void USART_IRQHandler (USART_RESOURCES *usart) {
-  uint32_t iir, event, val, i;
+  uint32_t iir, event, val, i = 0U;
 
   event = 0U;
   iir   = usart->reg->IIR;
@@ -2134,7 +2341,7 @@ static void USART_IRQHandler (USART_RESOURCES *usart) {
     // Transmit holding register empty
     if ((iir & USART_IIR_INTID_MSK) == USART_IIR_INTID_THRE) {
       val = 16U;
-      while ((val --) && (usart->info->xfer.tx_num != usart->info->xfer.tx_cnt)) {
+      while ((val --) && (usart->info->xfer.tx_num != 0U) && (usart->info->xfer.tx_num != usart->info->xfer.tx_cnt)) {
         if (((usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_MASTER)  ||
              (usart->info->mode == ARM_USART_MODE_SYNCHRONOUS_SLAVE )) &&
              (usart->info->xfer.sync_mode == USART_SYNC_MODE_RX)) {
@@ -2147,7 +2354,7 @@ static void USART_IRQHandler (USART_RESOURCES *usart) {
         usart->info->xfer.tx_cnt++;
       }
 
-      // Check if all data is transmitted
+      // Check if all data was transmitted
       if (usart->info->xfer.tx_num == usart->info->xfer.tx_cnt) {
         // Disable THRE interrupt
         usart->reg->IER &= ~USART_IER_THREIE;
@@ -2194,12 +2401,17 @@ static void USART_IRQHandler (USART_RESOURCES *usart) {
              (usart->info->xfer.sync_mode == USART_SYNC_MODE_TX)) {
           // Dummy read in synchronous transmit only mode
           usart->reg->RBR;
+          usart->info->xfer.rx_cnt++;
         } else {
-          // Read data from RX FIFO into receive buffer
-          usart->info->xfer.rx_buf[usart->info->xfer.rx_cnt] = usart->reg->RBR;
+          if (usart->info->xfer.rx_cnt < usart->info->xfer.rx_num) {
+            // Read data from RX FIFO into receive buffer
+            usart->info->xfer.rx_buf[usart->info->xfer.rx_cnt] = usart->reg->RBR & 0xFFU;
+            usart->info->xfer.rx_cnt++;
+          } else {
+            usart->reg->RBR;
+            event |= ARM_USART_EVENT_RX_OVERFLOW;
+          }
         }
-
-        usart->info->xfer.rx_cnt++;
 
         // Check if requested amount of data is received
         if (usart->info->xfer.rx_cnt == usart->info->xfer.rx_num) {
@@ -2237,7 +2449,9 @@ static void USART_IRQHandler (USART_RESOURCES *usart) {
       if ((usart->info->mode != ARM_USART_MODE_SYNCHRONOUS_MASTER) &&
           (usart->info->mode != ARM_USART_MODE_SYNCHRONOUS_SLAVE )) {
         // Signal RX Time-out event, if not all requested data received
-        if (usart->info->xfer.rx_cnt != usart->info->xfer.rx_num) {
+        if ((usart->info->xfer.rx_num != 0U) && 
+            (usart->info->xfer.rx_cnt != usart->info->xfer.rx_num)) {
+          usart->reg->RBR;
           event |= ARM_USART_EVENT_RX_TIMEOUT;
         }
       }

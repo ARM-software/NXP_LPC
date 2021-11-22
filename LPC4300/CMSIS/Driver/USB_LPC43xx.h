@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.1
+ * $Date:        30. April 2019
+ * $Revision:    V2.2
  *
  * Project:      USB Driver Definitions for NXP LPC43xx
  * -------------------------------------------------------------------------- */
@@ -24,7 +25,20 @@
 #ifndef __USB_LPC43XX_H
 #define __USB_LPC43XX_H
 
-#include <stdint.h>
+#include "RTE_Device.h"
+#include "RTE_Components.h"
+
+#if (defined(RTE_Drivers_USBD0) || defined(RTE_Drivers_USBD1))
+#include "Driver_USBD.h"
+#endif
+#if (defined(RTE_Drivers_USBH0) || defined(RTE_Drivers_USBH1))
+#include "Driver_USBH.h"
+#endif
+
+#include "LPC43xx.h"
+#include "SCU_LPC43xx.h"
+
+#include <string.h>
 
 #ifndef USB_ENDPT_MSK
 #define USB_ENDPT_MSK                          (0x3FU)
@@ -283,15 +297,15 @@
 // USB Endpoint Control Register
 #define USB_ENDPTCTRL_RXS                      (1U           )
 #define USB_ENDPTCTRL_RXT_POS                  (           2U)
-#define USB_ENDPTCTRL_RXT_MSK                  (3U     <<  USB_ENDPTCTRL_RXT_POS)
-#define USB_ENDPTCTRL_RXT(n)                   (((n)   <<  USB_ENDPTCTRL_RXT_POS) & USB_ENDPTCTRL_RXT_MSK)
+#define USB_ENDPTCTRL_RXT_MSK                  (3U             <<  USB_ENDPTCTRL_RXT_POS)
+#define USB_ENDPTCTRL_RXT(n)                   ((((uint32_t)n) <<  USB_ENDPTCTRL_RXT_POS) & USB_ENDPTCTRL_RXT_MSK)
 #define USB_ENDPTCTRL_RXI                      (1U     <<  5U)
 #define USB_ENDPTCTRL_RXR                      (1U     <<  6U)
 #define USB_ENDPTCTRL_RXE                      (1U     <<  7U)
 #define USB_ENDPTCTRL_TXS                      (1U     << 16U)
 #define USB_ENDPTCTRL_TXT_POS                  (          18U)
-#define USB_ENDPTCTRL_TXT_MSK                  (3U     << USB_ENDPTCTRL_TXT_POS)
-#define USB_ENDPTCTRL_TXT(n)                   (((n)   << USB_ENDPTCTRL_TXT_POS) & USB_ENDPTCTRL_TXT_MSK)
+#define USB_ENDPTCTRL_TXT_MSK                  (3U             << USB_ENDPTCTRL_TXT_POS)
+#define USB_ENDPTCTRL_TXT(n)                   (((uint32_t)n)  << USB_ENDPTCTRL_TXT_POS) & USB_ENDPTCTRL_TXT_MSK)
 #define USB_ENDPTCTRL_TXI                      (1U     << 21U)
 #define USB_ENDPTCTRL_TXR                      (1U     << 22U)
 #define USB_ENDPTCTRL_TXE                      (1U     << 23U)
@@ -299,8 +313,8 @@
 // Endpoint Queue Head Capabilities and Characteristics
 #define USB_EPQH_CAP_IOS                       (1U     << 15U)
 #define USB_EPQH_CAP_MAX_PACKET_LEN_POS        (          16U)
-#define USB_EPQH_CAP_MAX_PACKET_LEN_MSK        (0x7FFU << USB_EPQH_CAP_MAX_PACKET_LEN_POS)
-#define USB_EPQH_CAP_MAX_PACKET_LEN(n)         (((n)   << USB_EPQH_CAP_MAX_PACKET_LEN_POS) & USB_EPQH_CAP_MAX_PACKET_LEN_MSK)
+#define USB_EPQH_CAP_MAX_PACKET_LEN_MSK        (0x7FFU         << USB_EPQH_CAP_MAX_PACKET_LEN_POS)
+#define USB_EPQH_CAP_MAX_PACKET_LEN(n)         ((((uint32_t)n) << USB_EPQH_CAP_MAX_PACKET_LEN_POS) & USB_EPQH_CAP_MAX_PACKET_LEN_MSK)
 #define USB_EPQH_CAP_ZLT                       (1U     << 29U)
 #define USB_EPQH_CAP_MULT_POS                  (          30U)
 #define USB_EPQH_CAP_MULT_MSK                  (3UL    << USB_EPQH_CAP_MULT_POS)
@@ -314,12 +328,12 @@
 #define USB_bTD_TOKEN_STATUS_HALTED            (0x40U  &  USB_bTD_TOKEN_STATUS_MSK)
 #define USB_bTD_TOKEN_STATUS_ACTIVE            (0x80U  &  USB_bTD_TOKEN_STATUS_MSK)
 #define USB_bTD_TOKEN_MULTO_POS                (          10U)
-#define USB_bTD_TOKEN_MULTO_MSK                (3U     << USB_bTD_TOKEN_MULTO_POS)
-#define USB_bTD_TOKEN_MULTO(n)                 (((n)   << USB_bTD_TOKEN_MULTO_POS) & USB_bTD_TOKEN_MULTO_MSK)
+#define USB_bTD_TOKEN_MULTO_MSK                (3U             << USB_bTD_TOKEN_MULTO_POS)
+#define USB_bTD_TOKEN_MULTO(n)                 ((((uint32_t)n) << USB_bTD_TOKEN_MULTO_POS) & USB_bTD_TOKEN_MULTO_MSK)
 #define USB_bTD_TOKEN_IOC                      (1U     << 15U)
 #define USB_bTD_TOKEN_TOTAL_BYTES_POS          (          16U)
-#define USB_bTD_TOKEN_TOTAL_BYTES_MSK          (0x7FFFU<< USB_bTD_TOKEN_TOTAL_BYTES_POS)
-#define USB_bTD_TOKEN_TOTAL_BYTES(n)           (((n)   << USB_bTD_TOKEN_TOTAL_BYTES_POS) & USB_bTD_TOKEN_TOTAL_BYTES_MSK)
+#define USB_bTD_TOKEN_TOTAL_BYTES_MSK          (0x7FFFU        << USB_bTD_TOKEN_TOTAL_BYTES_POS)
+#define USB_bTD_TOKEN_TOTAL_BYTES(n)           ((((uint32_t)n) << USB_bTD_TOKEN_TOTAL_BYTES_POS) & USB_bTD_TOKEN_TOTAL_BYTES_MSK)
 
 // USB Driver State Flags
 // Device State Flags
@@ -329,5 +343,27 @@
 // Host State Flags
 #define USBH_DRIVER_INITIALIZED                (1U     <<  4U)
 #define USBH_DRIVER_POWERED                    (1U     <<  5U)
+
+// Exported Global functions and variables
+#if defined(RTE_Drivers_USBD0) || defined (RTE_Drivers_USBH0)
+extern volatile uint8_t USB0_role;
+extern volatile uint8_t USB0_state;
+#endif
+#if defined(RTE_Drivers_USBD1) || defined (RTE_Drivers_USBH1)
+extern volatile uint8_t USB1_role;
+extern volatile uint8_t USB1_state;
+#endif
+#if defined(RTE_Drivers_USBD0)
+extern ARM_DRIVER_USBD Driver_USBD0;
+#endif
+#if defined(RTE_Drivers_USBD1)
+extern ARM_DRIVER_USBD Driver_USBD1;
+#endif
+#if defined(RTE_Drivers_USBH0)
+extern ARM_DRIVER_USBH_HCI Driver_USBH0_HCI;
+#endif
+#if defined(RTE_Drivers_USBH1)
+extern ARM_DRIVER_USBH_HCI Driver_USBH1_HCI;
+#endif
 
 #endif /* __USB_LPC43XX_H */

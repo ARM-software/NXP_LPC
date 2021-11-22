@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.5
+ * $Date:        20. Januar 2020
+ * $Revision:    V2.8
  *
  * Driver:       Driver_SPI2
  * Configured:   via RTE_Device.h configuration file
@@ -31,6 +32,14 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.8
+ *    - Removed minor compiler warnings
+ *  Version 2.7
+ *    - Removed Arm Compiler warnings
+ *    - Added timeout to wait loops
+ *    - Made Pin configuration const 
+ *  Version 2.6
+ *    - MISO and MOSI pins can be configured as "not used"
  *  Version 2.5
  *    - Corrected Bus Speed Configuration
  *    - Corrected receive function. Updated Send and transmit function
@@ -50,11 +59,7 @@
  *    - Initial CMSIS Driver API V2.01 release
  */
 
-#include <string.h>
 #include "SPI_LPC43xx.h"
-
-#include "RTE_Device.h"
-#include "RTE_Components.h"
 
 #if   (defined(CORE_M0SUB))
 #define MX_SPI_IRQn       M0S_SPI_IRQn
@@ -67,9 +72,14 @@
 #define MX_SPI_IRQHandler SPI_IRQHandler
 #endif
 
-extern uint32_t GetClockFreq   (uint32_t clk_src);
+extern uint32_t GetClockFreq (uint32_t clk_src);
 
-#define ARM_SPI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,5)   // driver version
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT   (SystemCoreClock / 64U)
+#define ARM_SPI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,8)   // driver version
+
+// Function Prototypes
+void SPI_IRQHandler (void);
 
 #if ((defined(RTE_Drivers_SPI2)) && (!RTE_SPI))
 #error "SPI not configured in RTE_Device.h!"
@@ -83,29 +93,42 @@ static const ARM_DRIVER_VERSION DriverVersion = {
 
 // Driver Capabilities
 static const ARM_SPI_CAPABILITIES DriverCapabilities = {
-  0,  // Simplex Mode (Master and Slave)
-  0,  // TI Synchronous Serial Interface
-  0,  // Microwire Interface
-  1   // Signal Mode Fault event: \ref ARM_SPI_EVENT_MODE_FAULT
+  0U,  // Simplex Mode (Master and Slave)
+  0U,  // TI Synchronous Serial Interface
+  0U,  // Microwire Interface
+  1U,  // Signal Mode Fault event: \ref ARM_SPI_EVENT_MODE_FAULT
+  0U   // Reserved
 };
 
 #if (RTE_SPI)
 static SPI_INFO          SPI_Info = { 0 };
 static SPI_TRANSFER_INFO SPI_Xfer;
 
-static PIN_ID  SPI_pin_sck    = { RTE_SPI_SCK_PORT,  RTE_SPI_SCK_BIT,  RTE_SPI_SCK_FUNC };
-static PIN_ID  SPI_pin_miso   = { RTE_SPI_MISO_PORT, RTE_SPI_MISO_BIT, RTE_SPI_MISO_FUNC};
-static PIN_ID  SPI_pin_mosi   = { RTE_SPI_MOSI_PORT, RTE_SPI_MOSI_BIT, RTE_SPI_MOSI_FUNC};
+static const PIN_ID  SPI_pin_sck    = { RTE_SPI_SCK_PORT,  RTE_SPI_SCK_BIT,  {0U, 0U}, RTE_SPI_SCK_FUNC };
+#if (RTE_SPI_MISO_PIN_EN == 1U)
+static const PIN_ID  SPI_pin_miso   = { RTE_SPI_MISO_PORT, RTE_SPI_MISO_BIT, {0U, 0U}, RTE_SPI_MISO_FUNC};
+#endif
+#if (RTE_SPI_MOSI_PIN_EN == 1U)
+static const PIN_ID  SPI_pin_mosi   = { RTE_SPI_MOSI_PORT, RTE_SPI_MOSI_BIT, {0U, 0U}, RTE_SPI_MOSI_FUNC};
+#endif
 #if (RTE_SPI_SSEL_PIN_EN == 1U)
-static PIN_ID  SPI_pin_ssel   = { RTE_SPI_SSEL_PORT, RTE_SPI_SSEL_BIT, RTE_SPI_SSEL_FUNC };
-static GPIO_ID SPI_gpio_ssel  = { RTE_SPI_SSEL_GPIO_PORT, RTE_SPI_SSEL_GPIO_BIT};
+static const PIN_ID  SPI_pin_ssel   = { RTE_SPI_SSEL_PORT, RTE_SPI_SSEL_BIT, {0U, 0U}, RTE_SPI_SSEL_FUNC };
+static const GPIO_ID SPI_gpio_ssel  = { RTE_SPI_SSEL_GPIO_PORT, RTE_SPI_SSEL_GPIO_BIT};
 #endif
 
-static SPI_RESOURCES     SPI_Resources = {
+static SPI_RESOURCES SPI_Resources = {
     LPC_SPI,
   { &SPI_pin_sck,
+#if (RTE_SPI_MISO_PIN_EN == 1U)
     &SPI_pin_miso,
+#else
+    NULL,
+#endif
+#if (RTE_SPI_MOSI_PIN_EN == 1U)
     &SPI_pin_mosi,
+#else
+    NULL,
+#endif
 #if (RTE_SPI_SSEL_PIN_EN == 1U)
     &SPI_pin_ssel,
     &SPI_gpio_ssel,
@@ -165,8 +188,8 @@ static int32_t SPI_Initialize (ARM_SPI_SignalEvent_t cb_event) {
   // Configure pins
   val = SCU_PIN_CFG_PULLUP_DIS | SCU_PIN_CFG_HIGH_SPEED_SLEW_RATE_EN | SCU_PIN_CFG_INPUT_BUFFER_EN | SCU_PIN_CFG_INPUT_FILTER_DIS;
   SCU_PinConfigure (spi->pin.sck->port,  spi->pin.sck->num,  spi->pin.sck->config_val  | val);
-  SCU_PinConfigure (spi->pin.miso->port, spi->pin.miso->num, spi->pin.miso->config_val | val);
-  SCU_PinConfigure (spi->pin.mosi->port, spi->pin.mosi->num, spi->pin.mosi->config_val | val);
+  if (spi->pin.miso != NULL) { SCU_PinConfigure (spi->pin.miso->port, spi->pin.miso->num, spi->pin.miso->config_val | val); }
+  if (spi->pin.mosi != NULL) { SCU_PinConfigure (spi->pin.mosi->port, spi->pin.mosi->num, spi->pin.mosi->config_val | val); }
 
   spi->info->state = SPI_INITIALIZED;   // SPI is initialized
 
@@ -183,8 +206,8 @@ static int32_t SPI_Uninitialize (void) {
   // Unconfigure pins
   if (spi->pin.ssel != NULL) { SCU_PinConfigure     (spi->pin.ssel->port, spi->pin.ssel->num, 0U); }
                                SCU_PinConfigure     (spi->pin.sck->port,  spi->pin.sck->num,  0U);
-                               SCU_PinConfigure     (spi->pin.miso->port, spi->pin.miso->num, 0U);
-                               SCU_PinConfigure     (spi->pin.mosi->port, spi->pin.mosi->num, 0U);
+  if (spi->pin.miso != NULL) { SCU_PinConfigure     (spi->pin.miso->port, spi->pin.miso->num, 0U); }
+  if (spi->pin.mosi != NULL) { SCU_PinConfigure     (spi->pin.mosi->port, spi->pin.mosi->num, 0U); }
 
   spi->info->state = 0U;                // SPI is uninitialized
 
@@ -198,19 +221,38 @@ static int32_t SPI_Uninitialize (void) {
   \return      \ref execution_status
 */
 static int32_t SPI_PowerControl (ARM_POWER_STATE state) {
+  uint32_t tout_cnt;
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
 
-      NVIC_DisableIRQ (spi->irq_num);   // Disable SPI IRQ in NVIC
+      NVIC_DisableIRQ ((IRQn_Type)spi->irq_num);   // Disable SPI IRQ in NVIC
 
       // Reset SPI peripheral
       LPC_RGU->RESET_CTRL1 = (RGU_RESET_CTRL1_SPI_RST | (~(LPC_RGU->RESET_ACTIVE_STATUS1)));
-      while (!(LPC_RGU->RESET_ACTIVE_STATUS1 & RGU_RESET_ACTIVE_STATUS1_SPI_RST));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_RGU->RESET_ACTIVE_STATUS1 & RGU_RESET_ACTIVE_STATUS1_SPI_RST)){
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
 
       if ((LPC_CGU->BASE_SPI_CLK & 1U) == 0U) {
         LPC_CCU1->CLK_SPI_CFG = ~1U;
-        while (LPC_CCU1->CLK_SPI_CFG & 1U);
+        tout_cnt = LOOP_MAX_CNT;
+        while (LPC_CCU1->CLK_SPI_CFG & 1U){
+          if (tout_cnt-- == 0U) {
+            __NOP();
+            break;
+          }
+        }
 
         // Power down, clock source set to IRC
         LPC_CGU->BASE_SPI_CLK =  1U | (1U << 24) | (1U << 11);
@@ -222,7 +264,7 @@ static int32_t SPI_PowerControl (ARM_POWER_STATE state) {
       spi->info->status.mode_fault = 0U;
 
       // Clear pending USART interrupts in NVIC
-      NVIC_ClearPendingIRQ(spi->irq_num);
+      NVIC_ClearPendingIRQ((IRQn_Type)spi->irq_num);
 
       // Clear transfer information
       memset(spi->xfer, 0, sizeof(SPI_TRANSFER_INFO));
@@ -241,7 +283,13 @@ static int32_t SPI_PowerControl (ARM_POWER_STATE state) {
 
       // Reset SPI peripheral
       LPC_RGU->RESET_CTRL1 = (RGU_RESET_CTRL1_SPI_RST | (~(LPC_RGU->RESET_ACTIVE_STATUS1)));
-      while (!(LPC_RGU->RESET_ACTIVE_STATUS1 & RGU_RESET_ACTIVE_STATUS1_SPI_RST));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_RGU->RESET_ACTIVE_STATUS1 & RGU_RESET_ACTIVE_STATUS1_SPI_RST)){
+        if (tout_cnt-- == 0U) {
+            __NOP();
+            break;
+          }
+        }
 
       // Reset SPI Run-Time Resources
       spi->info->status.busy       = 0U;
@@ -250,11 +298,11 @@ static int32_t SPI_PowerControl (ARM_POWER_STATE state) {
 
       spi->info->state |= SPI_POWERED;  // SPI is powered
 
-      NVIC_ClearPendingIRQ (spi->irq_num);
-      NVIC_EnableIRQ (spi->irq_num);    // Enable SPI IRQ in NVIC
+      NVIC_ClearPendingIRQ ((IRQn_Type)spi->irq_num);
+      NVIC_EnableIRQ ((IRQn_Type)spi->irq_num);    // Enable SPI IRQ in NVIC
       break;
 
-    default:
+    case ARM_POWER_LOW:
       return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
 
@@ -279,7 +327,7 @@ static int32_t SPI_Send (const void *data, uint32_t num) {
   spi->info->status.mode_fault = 0U;
 
   spi->xfer->rx_buf = NULL;
-  spi->xfer->tx_buf = (uint8_t *)data;
+  spi->xfer->tx_buf = (uint8_t *)(uint32_t)data;
 
   spi->xfer->num    = num;
   spi->xfer->rx_cnt = 0U;
@@ -351,7 +399,7 @@ static int32_t SPI_Transfer (const void *data_out, void *data_in, uint32_t num) 
   spi->info->status.mode_fault = 0U;
 
   spi->xfer->rx_buf = (uint8_t *)data_in;
-  spi->xfer->tx_buf = (uint8_t *)data_out;
+  spi->xfer->tx_buf = (uint8_t *)(uint32_t)data_out;
 
   spi->xfer->num    = num;
   spi->xfer->rx_cnt = 0U;
@@ -457,10 +505,10 @@ set_speed:
       break;
 
     case ARM_SPI_GET_BUS_SPEED:             // Get Bus Speed in bps
-      return (GetClockFreq(CLK_SRC_PLL1) / (spi->reg->CCR & SPI_CCR_COUNTER));
+      return (int32_t)(GetClockFreq(CLK_SRC_PLL1) / (spi->reg->CCR & SPI_CCR_COUNTER));
 
     case ARM_SPI_SET_DEFAULT_TX_VALUE:      // Set default Transmit value; arg = value
-      spi->xfer->def_val = (uint16_t)(arg & 0xFFFF);
+      spi->xfer->def_val = (uint16_t)(arg & 0xFFFFU);
       return ARM_DRIVER_OK;
 
     case ARM_SPI_CONTROL_SS:                // Control Slave Select; arg = 0:inactive, 1:active 
@@ -620,7 +668,7 @@ void MX_SPI_IRQHandler (void) {
   uint16_t data;
   uint8_t  sr;
 
-  sr            = spi->reg->SR;                       // Read status register
+  sr            = (uint8_t)spi->reg->SR;              // Read status register
   spi->reg->INT = 1U;                                 // Clear interrupt
 
   if (sr & SPI_SR_MODF) {                             // Mode fault
@@ -653,7 +701,7 @@ void MX_SPI_IRQHandler (void) {
     }
 
     if (spi->xfer->num > spi->xfer->rx_cnt) {
-      data = spi->reg->DR;                                // Read data
+      data = spi->reg->DR & 0xFFFFU;                      // Read data
       if (spi->xfer->rx_buf) {
         *(spi->xfer->rx_buf++) = (uint8_t)data;           // Put data into buffer
           if ((spi->reg->CR & SPI_CR_BITENABLE  )  &&     // If data frame format != 8

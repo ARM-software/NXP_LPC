@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,13 +16,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.3
+ *
+ * $Date:        10. Januar 2020
+ * $Revision:    V1.4
  *
  * Project:      GPDMA Driver for NXP LPC17xx
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.4
+ *    - Removed minor compiler warnings
  *  Version 1.3
  *    - Corrected transfers bigger than 4k
  *  Version 1.2
@@ -30,12 +34,13 @@
  *    - Updated Initialize and Uninitialize functions
  */
 
+#include "GPDMA_LPC17xx.h"
+
 #if defined (LPC175x_6x)
   #include "LPC17xx.h"
 #elif defined (LPC177x_8x)
   #include "LPC177x_8x.h"
 #endif
-#include "GPDMA_LPC17xx.h"
 
 // GPDMA Channel register block structure
 typedef struct {
@@ -45,7 +50,7 @@ typedef struct {
   __IO uint32_t  CONTROL;       // DMA Channel Control Register
   __IO uint32_t  CONFIG;        // DMA Channel Configuration Register
   __I  uint32_t  RESERVED1[3];
-} GPDMA_CHANNEL_REG;
+} volatile GPDMA_CHANNEL_REG;
 
 // GPDMA register structure
 typedef struct
@@ -84,6 +89,9 @@ static GPDMA_Channel_Info Channel_info[GPDMA_NUMBER_OF_CHANNELS] = { 0U };
 
 #define GPDMA_CHANNEL(n)  ((GPDMA_CHANNEL_REG *) (&(GPDMACH0->SRCADDR) + (n * 8U)))
 #define LPC17xx_GPDMA     ((GPDMA_REG         *) LPC_GPDMA_BASE)
+
+// Interrupt Handler Prototype
+void DMA_IRQHandler (void);
 
 /**
   \fn          int32_t Set_Channel_active_flag (uint8_t ch)
@@ -349,7 +357,7 @@ int32_t GPDMA_ChannelDisable (uint8_t ch) {
 uint32_t GPDMA_ChannelGetStatus (uint8_t ch) {
 
   // Check if channel is valid
-  if (ch >= GPDMA_NUMBER_OF_CHANNELS) { return 0U; };
+  if (ch >= GPDMA_NUMBER_OF_CHANNELS) { return 0U; }
 
   if (Channel_active & (1 << ch)) { return 1U; }
   else                            { return 0U; }
@@ -376,7 +384,7 @@ void DMA_IRQHandler (void) {
   uint32_t ch, size;
   GPDMA_CHANNEL_REG * dma_ch;
 
-  for (ch = 0; ch < GPDMA_NUMBER_OF_CHANNELS; ch++) {
+  for (ch = 0U; ch < GPDMA_NUMBER_OF_CHANNELS; ch++) {
     if (LPC17xx_GPDMA->DMACIntStat & (1U << ch)) {
       dma_ch = GPDMA_CHANNEL(ch);
 
@@ -414,7 +422,7 @@ void DMA_IRQHandler (void) {
           // All Data has been transferred
 
           // Clear Channel active flag
-          Clear_Channel_active_flag (ch);
+          Clear_Channel_active_flag ((uint8_t)ch);
 
           // Signal Event
           if (Channel_info[ch].cb_event) {
@@ -428,7 +436,7 @@ void DMA_IRQHandler (void) {
           dma_ch->CONTROL = 0U;
 
           // Clear Channel active flag
-          Clear_Channel_active_flag (ch);
+          Clear_Channel_active_flag ((uint8_t)ch);
 
           // Clear interrupt flag
           LPC17xx_GPDMA->DMACIntErrClr = (1U << ch);

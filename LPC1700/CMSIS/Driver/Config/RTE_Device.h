@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2016 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.4.0
+ * $Date:        20. April 2016
+ * $Revision:    V2.4.1
  *
  * Project:      RTE Device Configuration for NXP LPC17xx
  * -------------------------------------------------------------------------- */
@@ -311,27 +312,38 @@
 // <e> UART0 (Universal asynchronous receiver transmitter)
 #define RTE_UART0                       0
 
-//   <o> UART0_TX Pin <0=>P0_2
+//   <o> UART0_TX Pin <0=>Not used <1=>P0_2
 //   <i> UART0 Serial Output pin
 #define RTE_UART0_TX_ID                 0
 #if    (RTE_UART0_TX_ID == 0)
+#define RTE_UART0_TX_PIN_EN             0
+#elif  (RTE_UART0_TX_ID == 1)
 #define RTE_UART0_TX_PORT               0
 #define RTE_UART0_TX_BIT                2
 #define RTE_UART0_TX_FUNC               1
 #else
 #error "Invalid UART0_TX Pin Configuration!"
 #endif
+#ifndef RTE_UART0_TX_PIN_EN
+#define RTE_UART0_TX_PIN_EN             1
+#endif
 
-//   <o> UART0_RX Pin <0=>P0_3
+//   <o> UART0_RX Pin <0=>Not used <1=>P0_3
 //   <i> UART0 Serial Input pin
 #define RTE_UART0_RX_ID                 0
 #if    (RTE_UART0_RX_ID == 0)
+#define RTE_UART0_RX_PIN_EN             0
+#elif  (RTE_UART0_RX_ID == 1)
 #define RTE_UART0_RX_PORT               0
 #define RTE_UART0_RX_BIT                3
 #define RTE_UART0_RX_FUNC               1
 #else
 #error "Invalid UART0_RX Pin Configuration!"
 #endif
+#ifndef RTE_UART0_RX_PIN_EN
+#define RTE_UART0_RX_PIN_EN             1
+#endif
+
 //   <h> DMA
 //     <e> Tx
 //       <o1> Channel     <0=>0 <1=>1 <2=>2 <3=>3 <4=>4 <5=>5 <6=>6 <7=>7
@@ -349,34 +361,44 @@
 // <e> UART1 (Universal asynchronous receiver transmitter)
 #define RTE_UART1                       0
 
-//   <o> U1_TX Pin <0=>P0_15 <1=>P2_0
+//   <o> U1_TX Pin <0=>Not used <1=>P0_15 <2=>P2_0
 //   <i> UART1 Serial Output pin
 #define RTE_UART1_TX_ID                 1
 #if    (RTE_UART1_TX_ID == 0)
+#define RTE_UART1_TX_PIN_EN             0
+#elif  (RTE_UART1_TX_ID == 1)
 #define RTE_UART1_TX_PORT               0
 #define RTE_UART1_TX_BIT                15
 #define RTE_UART1_TX_FUNC               1
-#elif  (RTE_UART1_TX_ID == 1)
+#elif  (RTE_UART1_TX_ID == 2)
 #define RTE_UART1_TX_PORT               2
 #define RTE_UART1_TX_BIT                0
 #define RTE_UART1_TX_FUNC               2
 #else
 #error "Invalid U1_TX Pin Configuration!"
 #endif
+#ifndef RTE_UART1_TX_PIN_EN
+#define RTE_UART1_TX_PIN_EN             1
+#endif
 
-//   <o> U1_RX Pin <0=>P0_16 <1=>P2_1
+//   <o> U1_RX Pin <0=>Not used <1=>P0_16 <2=>P2_1
 //   <i> UART1 Serial Input pin
 #define RTE_UART1_RX_ID                 1
 #if    (RTE_UART1_RX_ID == 0)
+#define RTE_UART1_RX_PIN_EN             0
+#elif  (RTE_UART1_RX_ID == 1)
 #define RTE_UART1_RX_PORT               0
 #define RTE_UART1_RX_BIT                16
 #define RTE_UART1_RX_FUNC               1
-#elif  (RTE_UART1_RX_ID == 1)
+#elif  (RTE_UART1_RX_ID == 2)
 #define RTE_UART1_RX_PORT               2
 #define RTE_UART1_RX_BIT                1
 #define RTE_UART1_RX_FUNC               2
 #else
 #error "Invalid U1_RX Pin Configuration!"
+#endif
+#ifndef RTE_UART1_RX_PIN_EN
+#define RTE_UART1_RX_PIN_EN             1
 #endif
 
 //     <h> Modem Lines
@@ -395,7 +417,7 @@
 #else
 #error "Invalid U1_CTS Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_CTS_PIN_EN
+#ifndef RTE_UART1_CTS_PIN_EN
 #define RTE_UART1_CTS_PIN_EN            1
 #endif
 
@@ -415,7 +437,7 @@
 #else
 #error "Invalid UART1_DCD Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_DCD_PIN_EN
+#ifndef RTE_UART1_DCD_PIN_EN
 #define RTE_UART1_DCD_PIN_EN            1
 #endif
 
@@ -434,7 +456,7 @@
 #else
 #error "Invalid UART1_DSR Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_DSR_PIN_EN
+#ifndef RTE_UART1_DSR_PIN_EN
 #define RTE_UART1_DSR_PIN_EN            1
 #endif
 
@@ -453,7 +475,7 @@
 #else
 #error "Invalid UART1_DTR Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_DTR_PIN_EN
+#ifndef RTE_UART1_DTR_PIN_EN
 #define RTE_UART1_DTR_PIN_EN            1
 #endif
 
@@ -472,7 +494,7 @@
 #else
 #error "Invalid UART1_RI Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_RI_PIN_EN
+#ifndef RTE_UART1_RI_PIN_EN
 #define RTE_UART1_RI_PIN_EN             1
 #endif
 
@@ -491,7 +513,7 @@
 #else
 #error "Invalid UART1_RTS Pin Configuration!"
 #endif
-#ifndef   RTE_UART1_RTS_PIN_EN
+#ifndef RTE_UART1_RTS_PIN_EN
 #define RTE_UART1_RTS_PIN_EN            1
 #endif
 
@@ -515,34 +537,44 @@
 // <e> UART2 (Universal asynchronous receiver transmitter)
 #define RTE_UART2                       0
 
-//   <o> UART2_TX Pin <0=>P0_10 <1=>P2_8
+//   <o> UART2_TX Pin <0=>Not used <1=>P0_10 <2=>P2_8
 //   <i> UART2 Serial Output pin
 #define RTE_UART2_TX_ID                 0
 #if    (RTE_UART2_TX_ID == 0)
+#define RTE_UART2_TX_PIN_EN             0
+#elif  (RTE_UART2_TX_ID == 1)
 #define RTE_UART2_TX_PORT               0
 #define RTE_UART2_TX_BIT                10
 #define RTE_UART2_TX_FUNC               1
-#elif  (RTE_UART2_TX_ID == 1)
+#elif  (RTE_UART2_TX_ID == 2)
 #define RTE_UART2_TX_PORT               2
 #define RTE_UART2_TX_BIT                8
 #define RTE_UART2_TX_FUNC               2
 #else
 #error "Invalid UART2_TX Pin Configuration!"
 #endif
+#ifndef RTE_UART2_TX_PIN_EN
+#define RTE_UART2_TX_PIN_EN             1
+#endif
 
-//   <o> UART2_RX Pin <0=>P0_11 <1=>P2_9
+//   <o> UART2_RX Pin <0=>Not used <1=>P0_11 <2=>P2_9
 //   <i> UART2 Serial Input pin
 #define RTE_UART2_RX_ID                 0
 #if    (RTE_UART2_RX_ID == 0)
+#define RTE_UART2_RX_PIN_EN             0
+#elif  (RTE_UART2_RX_ID == 1)
 #define RTE_UART2_RX_PORT               0
 #define RTE_UART2_RX_BIT                11
 #define RTE_UART2_RX_FUNC               1
-#elif  (RTE_UART2_RX_ID == 1)
+#elif  (RTE_UART2_RX_ID == 2)
 #define RTE_UART2_RX_PORT               2
 #define RTE_UART2_RX_BIT                9
 #define RTE_UART2_RX_FUNC               2
 #else
 #error "Invalid UART2_RX Pin Configuration!"
+#endif
+#ifndef RTE_UART2_RX_PIN_EN
+#define RTE_UART2_RX_PIN_EN             1
 #endif
 
 //   <h> DMA
@@ -563,42 +595,52 @@
 // <e> UART3 (Universal asynchronous receiver transmitter)
 #define RTE_UART3                       0
 
-//   <o> UART3_TX Pin <0=>P0_0 <1=>P0_25 <2=>P4_28
+//   <o> UART3_TX Pin <0=>Not used <1=>P0_0 <2=>P0_25 <3=>P4_28
 //   <i> UART3 Serial Output pin
 #define RTE_UART3_TX_ID                 0
 #if    (RTE_UART3_TX_ID == 0)
+#define RTE_UART3_TX_PIN_EN             0
+#elif  (RTE_UART3_TX_ID == 1)
 #define RTE_UART3_TX_PORT               0
 #define RTE_UART3_TX_BIT                0
 #define RTE_UART3_TX_FUNC               2
-#elif  (RTE_UART3_TX_ID == 1)
+#elif  (RTE_UART3_TX_ID == 2)
 #define RTE_UART3_TX_PORT               0
 #define RTE_UART3_TX_BIT                25
 #define RTE_UART3_TX_FUNC               3
-#elif  (RTE_UART3_TX_ID == 2)
+#elif  (RTE_UART3_TX_ID == 3)
 #define RTE_UART3_TX_PORT               4
 #define RTE_UART3_TX_BIT                28
 #define RTE_UART3_TX_FUNC               3
 #else
 #error "Invalid UART3_TX Pin Configuration!"
 #endif
+#ifndef RTE_UART3_TX_PIN_EN
+#define RTE_UART3_TX_PIN_EN             1
+#endif
 
-//   <o> UART3_RX Pin <0=>P0_1 <1=>P0_26 <2=>P4_29
+//   <o> UART3_RX Pin <0=>Not used <1=>P0_1 <2=>P0_26 <3=>P4_29
 //   <i> UART3 Serial Input pin
 #define RTE_UART3_RX_ID                 0
 #if    (RTE_UART3_RX_ID == 0)
+#define RTE_UART3_RX_PIN_EN             0
+#elif  (RTE_UART3_RX_ID == 1)
 #define RTE_UART3_RX_PORT               0
 #define RTE_UART3_RX_BIT                1
 #define RTE_UART3_RX_FUNC               2
-#elif  (RTE_UART3_RX_ID == 1)
+#elif  (RTE_UART3_RX_ID == 2)
 #define RTE_UART3_RX_PORT               0
 #define RTE_UART3_RX_BIT                26
 #define RTE_UART3_RX_FUNC               3
-#elif  (RTE_UART3_RX_ID == 2)
+#elif  (RTE_UART3_RX_ID == 3)
 #define RTE_UART3_RX_PORT               4
 #define RTE_UART3_RX_BIT                29
 #define RTE_UART3_RX_FUNC               3
 #else
 #error "Invalid UART3_RX Pin Configuration!"
+#endif
+#ifndef RTE_UART3_RX_PIN_EN
+#define RTE_UART3_RX_PIN_EN             1
 #endif
 
 //   <h> DMA
@@ -749,34 +791,44 @@
   #error "Invalid SSP0 SSP0_SCK Pin Configuration!"
 #endif
 
-//     <o> SSP0_MISO <0=>P0_17 <1=>P1_23
+//     <o> SSP0_MISO <0=>Not used <1=>P0_17 <2=>P1_23
 //     <i> Master In Slave Out for SSP0
 #define   RTE_SSP0_MISO_PIN_SEL         0
 #if      (RTE_SSP0_MISO_PIN_SEL == 0)
+  #define RTE_SSP0_MISO_PIN_EN          0
+#elif    (RTE_SSP0_MISO_PIN_SEL == 1)
   #define RTE_SSP0_MISO_PORT            0
   #define RTE_SSP0_MISO_BIT             17
   #define RTE_SSP0_MISO_FUNC            2
-#elif    (RTE_SSP0_MISO_PIN_SEL == 1)
+#elif    (RTE_SSP0_MISO_PIN_SEL == 2)
   #define RTE_SSP0_MISO_PORT            1
   #define RTE_SSP0_MISO_BIT             23
   #define RTE_SSP0_MISO_FUNC            3
 #else
   #error "Invalid SSP0 SSP0_MISO Pin Configuration!"
 #endif
+#ifndef   RTE_SSP0_MISO_PIN_EN
+#define   RTE_SSP0_MISO_PIN_EN          1
+#endif
 
-//     <o> SSP0_MOSI <0=>P0_18 <1=>P1_24
+//     <o> SSP0_MOSI <0=>Not used <1=>P0_18 <2=>P1_24
 //     <i> Master Out Slave In for SSP0
 #define   RTE_SSP0_MOSI_PIN_SEL         0
 #if      (RTE_SSP0_MOSI_PIN_SEL == 0)
+  #define RTE_SSP0_MOSI_PIN_EN          0
+#elif    (RTE_SSP0_MOSI_PIN_SEL == 1)
   #define RTE_SSP0_MOSI_PORT            0
   #define RTE_SSP0_MOSI_BIT             18
   #define RTE_SSP0_MOSI_FUNC            2
-#elif    (RTE_SSP0_MOSI_PIN_SEL == 1)
+#elif    (RTE_SSP0_MOSI_PIN_SEL == 2)
   #define RTE_SSP0_MOSI_PORT            1
   #define RTE_SSP0_MOSI_BIT             24
   #define RTE_SSP0_MOSI_FUNC            3
 #else
   #error "Invalid SSP0 SSP0_MOSI Pin Configuration!"
+#endif
+#ifndef   RTE_SSP0_MOSI_PIN_EN
+#define   RTE_SSP0_MOSI_PIN_EN          1
 #endif
 
 //   </h>
@@ -830,26 +882,36 @@
   #error "Invalid SSP1 SSP1_SCK Pin Configuration!"
 #endif
 
-//     <o> SSP1_MISO <0=>P0_8
+//     <o> SSP1_MISO <0=>Not used <1=>P0_8
 //     <i> Master In Slave Out for SSP1
 #define   RTE_SSP1_MISO_PIN_SEL         0
 #if      (RTE_SSP1_MISO_PIN_SEL == 0)
+  #define RTE_SSP1_MISO_PIN_EN          0
+#elif    (RTE_SSP1_MISO_PIN_SEL == 1)
   #define RTE_SSP1_MISO_PORT            0
   #define RTE_SSP1_MISO_BIT             8
   #define RTE_SSP1_MISO_FUNC            2
 #else
   #error "Invalid SSP1 SSP1_MISO Pin Configuration!"
 #endif
+#ifndef   RTE_SSP1_MISO_PIN_EN
+#define   RTE_SSP1_MISO_PIN_EN          1
+#endif
 
-//     <o> SSP1_MOSI <0=>P0_9
-//     <i> Master Out Slave In for SSP0
+//     <o> SSP1_MOSI <0=>Not used <1=>P0_9
+//     <i> Master Out Slave In for SSP1
 #define   RTE_SSP1_MOSI_PIN_SEL         0
 #if      (RTE_SSP1_MOSI_PIN_SEL == 0)
+  #define RTE_SSP1_MOSI_PIN_EN          0
+#elif    (RTE_SSP1_MOSI_PIN_SEL == 1)
   #define RTE_SSP1_MOSI_PORT            0
   #define RTE_SSP1_MOSI_BIT             9
   #define RTE_SSP1_MOSI_FUNC            2
 #else
   #error "Invalid SSP1 SSP1_MOSI Pin Configuration!"
+#endif
+#ifndef   RTE_SSP1_MOSI_PIN_EN
+#define   RTE_SSP1_MOSI_PIN_EN          1
 #endif
 
 //   </h>
@@ -898,26 +960,38 @@
 #else
   #error "Invalid SPI SPI_SCK Pin Configuration!"
 #endif
-//     <o> SPI_MISO <0=>P0_17
+//     <o> SPI_MISO <0=>Not used <1=>P0_17
 //     <i> Master In Slave Out for SPI
 #define   RTE_SPI_MISO_PIN_SEL          0
 #if      (RTE_SPI_MISO_PIN_SEL == 0)
+  #define RTE_SPI_MISO_PIN_EN           0
+#elif    (RTE_SPI_MISO_PIN_SEL == 1)
   #define RTE_SPI_MISO_PORT             0
   #define RTE_SPI_MISO_BIT              17
   #define RTE_SPI_MISO_FUNC             3
 #else
   #error "Invalid SPI SPI_MISO Pin Configuration!"
 #endif
-//     <o> SPI_MOSI <0=>P0_18
+#ifndef   RTE_SPI_MISO_PIN_EN
+#define   RTE_SPI_MISO_PIN_EN           1
+#endif
+
+//     <o> SPI_MOSI <0=>Not used <1=>P0_18
 //     <i> Master Out Slave In for SPI
 #define   RTE_SPI_MOSI_PIN_SEL          0
 #if      (RTE_SPI_MOSI_PIN_SEL == 0)
+  #define RTE_SPI_MOSI_PIN_EN           0
+#elif    (RTE_SPI_MOSI_PIN_SEL == 1)
   #define RTE_SPI_MOSI_PORT             0
   #define RTE_SPI_MOSI_BIT              18
   #define RTE_SPI_MOSI_FUNC             3
 #else
   #error "Invalid SPI SPI_MOSI Pin Configuration!"
 #endif
+#ifndef   RTE_SPI_MOSI_PIN_EN
+#define   RTE_SPI_MOSI_PIN_EN           1
+#endif
+
 //   </h> Pin Configuration
 // </e> SPI (Serial Peripheral Interface) [Driver_SPI2]
 

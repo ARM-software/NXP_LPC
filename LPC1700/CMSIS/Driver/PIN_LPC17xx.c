@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ *
+ * $Date:        01. August 2019
+ * $Revision:    V1.1
  *
  * Project:      PIN Driver for NXP LPC17xx
  * -------------------------------------------------------------------------- */
@@ -24,8 +26,8 @@
 #include "LPC17xx.h"
 #include "PIN_LPC17xx.h"
 
-#define PIN_Func(port,regidx) (*((volatile uint32_t *) (&(LPC_PINCON->PINSEL0)     + 2*port + regidx)))
-#define PIN_Mode(port,regidx) (*((volatile uint32_t *) (&(LPC_PINCON->PINMODE0)    + 2*port + regidx)))
+#define PIN_Func(port,regidx) (*((volatile uint32_t *) (&(LPC_PINCON->PINSEL0)     + 2U*port + regidx)))
+#define PIN_Mode(port,regidx) (*((volatile uint32_t *) (&(LPC_PINCON->PINMODE0)    + 2U*port + regidx)))
 #define PIN_ModeOp(port)      (*((volatile uint32_t *) (&(LPC_PINCON->PINMODE_OD0) + port)))
 
 // I2C Pin Configuration register bit description
@@ -51,16 +53,16 @@ int32_t PIN_Configure (uint8_t port, uint8_t pin, uint8_t function, uint8_t mode
   uint8_t pinnum = pin;
 
   if (pin >= 16) {
-    pinnum   = pin - 16;
-    regidx = 1;
+    pinnum   = pin - 16U;
+    regidx = 1U;
   }
   // Configure Pin function
-  PIN_Func(port, regidx) &= ~(0x03UL << (pinnum * 2));
-  PIN_Func(port, regidx) |= ((uint32_t)function) << (pinnum * 2);
+  PIN_Func(port, regidx) &= ~(0x03UL << (pinnum * 2U));
+  PIN_Func(port, regidx) |= ((uint32_t)function) << (pinnum * 2U);
 
   // Configure Register mode
-  PIN_Mode(port, regidx) &= ~(0x03UL << (pinnum * 2));
-  PIN_Mode(port, regidx) |= ((uint32_t)mode) << (pinnum * 2);
+  PIN_Mode(port, regidx) &= ~(0x03UL << (pinnum * 2U));
+  PIN_Mode(port, regidx) |= ((uint32_t)mode) << (pinnum * 2U);
   
   // Configure Open drain mode
   if (open_drain == PIN_PINMODE_OPENDRAIN) {
@@ -108,7 +110,7 @@ int32_t PIN_ConfigureTPIU (bool enable)
 */
 int32_t PIN_ConfigureI2C0Pins (uint8_t i2cPinMode, bool enableFilterSlewRate)
 {
-  uint32_t regVal = 0;
+  uint32_t regVal = 0U;
 
   if (i2cPinMode == PIN_I2C_Fast_Plus_Mode){
     regVal |= PIN_I2CPADCFG_SCLDRV0 | PIN_I2CPADCFG_SDADRV0;

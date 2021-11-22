@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,14 +16,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.2
+ *
+ * $Date:        10. Januar 2020
+ * $Revision:    V1.4
  *
  * Project:      MCI Driver Definitions for NXP LPC177x/8x
  * -------------------------------------------------------------------------- */
 
 #ifndef __MCI_LPC177X8X_H
 #define __MCI_LPC177X8X_H
+
+#include <string.h>
 
 #include "Driver_MCI.h"
 
@@ -32,9 +36,6 @@
 #include "GPDMA_LPC17xx.h"
 
 #include "RTE_Device.h"
-
-#include <string.h>
-
 
 #if (defined(RTE_Drivers_MCI0) && (RTE_SDIO == 0))
   #error "SDIO not configured in RTE_Device.h!"
@@ -214,8 +215,8 @@ typedef struct _MCI_INFO {
   uint32_t             *response;       /* Pointer to response buffer         */
   MCI_XFER              xfer;           /* Data transfer description          */
   uint8_t volatile      flags;          /* Driver state flags                 */
+  uint8_t               reserved[3];    /* Reserved                           */
   uint32_t              dctrl;          /* Data control register value        */
   uint32_t              dlen;           /* Data length register value         */
 } MCI_INFO;
-
 #endif /* __MCI_LPC177X8X_H */

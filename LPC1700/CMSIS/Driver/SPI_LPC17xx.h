@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.0
+ *
+ * $Date:        01. August 2019
+ * $Revision:    V2.2
  *
  * Project:      SPI Driver Definitions for NXP LPC17xx
  * -------------------------------------------------------------------------- */
@@ -32,6 +34,9 @@
 #endif
 
 #include "Driver_SPI.h"
+
+#include "RTE_Device.h"
+#include "RTE_Components.h"
 
 /* SPI Register Interface Definitions */
 #define CGU_BASE_SPI_CLK_PD               (0x01U << 0)      /*!< CGU BASE_SPI_CLK: PD Mask               */
@@ -87,11 +92,11 @@
 #define SPI_MODE_FAULT                    (1U    << 4)      // SPI mode fault occurred
 
 /* SPI Pins Configuration */
-typedef const struct _SPI_PINS {
-  PIN                  *ssel;           // SSEL pin
-  PIN                  *sck;            // SCK pin
-  PIN                  *miso;           // MISO pin
-  PIN                  *mosi;           // MOSI pin
+typedef const struct {
+  const PIN            *ssel;           // SSEL pin
+  const PIN            *sck;            // SCK pin
+  const PIN            *miso;           // MISO pin
+  const PIN            *mosi;           // MOSI pin
   uint8_t               ssel_func;      // SSEL pin alternate function
   uint8_t               sck_func;       // SCK pin alternate function
   uint8_t               miso_func;      // MISO pin alternate function
@@ -99,7 +104,7 @@ typedef const struct _SPI_PINS {
 } SPI_PINS;
 
 /* Clocks Configuration */
-typedef const struct _SPI_CLOCK {
+typedef const struct {
   uint32_t              reg_pwr_val;    // SPI block power control register value
   volatile uint32_t    *reg_pwr;        // SPI block power control  register
   uint32_t              peri_cfg_pos;   // SPI peripheral clock configuration position
@@ -109,21 +114,23 @@ typedef const struct _SPI_CLOCK {
 
 /* SPI status */
 typedef struct _SPI_STATUS {
-  uint8_t busy;                         // Transmitter/Receiver busy flag
-  uint8_t data_lost;                    // Data lost: Receive overflow / Transmit underflow (cleared on start of transfer operation)
-  uint8_t mode_fault;                   // Mode fault detected; optional (cleared on start of transfer operation)
+  uint8_t               busy;           // Transmitter/Receiver busy flag
+  uint8_t               data_lost;      // Data lost: Receive overflow / Transmit underflow (cleared on start of transfer operation)
+  uint8_t               mode_fault;     // Mode fault detected; optional (cleared on start of transfer operation)
+  uint8_t               reserved;
 } SPI_STATUS;
 
 /* SPI Information (Run-time) */
-typedef struct _SPI_INFO {
+typedef struct {
   ARM_SPI_SignalEvent_t cb_event;       // Event Callback
   SPI_STATUS            status;         // Status flags
-  uint8_t               state;          // Current SPI state
   uint32_t              mode;           // Current SPI mode
+  uint8_t               state;          // Current SPI state
+  uint8_t               reserved[3];
 } SPI_INFO;
 
 /* SPI Transfer Information (Run-Time) */
-typedef struct _SPI_TRANSFER_INFO {
+typedef struct {
   uint32_t              num;            // Total number of transfers
   uint8_t              *rx_buf;         // Pointer to in data buffer
   uint8_t              *tx_buf;         // Pointer to out data buffer
@@ -131,6 +138,7 @@ typedef struct _SPI_TRANSFER_INFO {
   uint32_t              tx_cnt;         // Number of data sent
   uint32_t              dump_val;       // Variable for dumping DMA data
   uint16_t              def_val;        // Default transfer value
+  uint8_t               reserved[2];
 } SPI_TRANSFER_INFO;
 
 /* SPI Resources */
@@ -138,9 +146,14 @@ typedef struct {
   LPC_SPI_TypeDef      *reg;            // SPI peripheral register interface
   SPI_PINS              pin;            // SPI pins configuration
   SPI_CLOCKS            clk;            // SPI clocks configuration
-  IRQn_Type             irq_num;        // SPI IRQ number
+  int32_t               irq_num;        // SPI IRQ number
   SPI_INFO             *info;           // SPI Run-time information
   SPI_TRANSFER_INFO    *xfer;           // SPI transfer information
 } const SPI_RESOURCES;
+
+// Global functions and variables exported by driver .c module */
+#if (RTE_SPI)
+extern ARM_DRIVER_SPI Driver_SPI2;
+#endif
 
 #endif /* __SPI_LPC17XX_H */

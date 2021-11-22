@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.2
+ *
+ * $Date:        10. Januar 2020
+ * $Revision:    V1.4
  *
  * Project:      GPDMA Driver Definitions for NXP LPC17xx
  * -------------------------------------------------------------------------- */
@@ -24,83 +26,87 @@
 #ifndef __GPDMA_LPC17XX_H
 #define __GPDMA_LPC17XX_H
 
-#include <stdint.h>
+#if defined (LPC175x_6x)
+  #include "LPC17xx.h"
+#elif defined (LPC177x_8x)
+  #include "LPC177x_8x.h"
+#endif
 
 // Number of GPDMA channels
 #define GPDMA_NUMBER_OF_CHANNELS           ((uint8_t) 8)
 
 // GPDMA Events
-#define GPDMA_EVENT_TERMINAL_COUNT_REQUEST (1)
-#define GPDMA_EVENT_ERROR                  (2)
+#define GPDMA_EVENT_TERMINAL_COUNT_REQUEST (1U)
+#define GPDMA_EVENT_ERROR                  (2U)
 
 // GPDMA Burst size in Source and Destination definitions
-#define GPDMA_BSIZE_1                      (0)  // Burst size = 1
-#define GPDMA_BSIZE_4                      (1)  // Burst size = 4
-#define GPDMA_BSIZE_8                      (2)  // Burst size = 8
-#define GPDMA_BSIZE_16                     (3)  // Burst size = 16
-#define GPDMA_BSIZE_32                     (4)  // Burst size = 32
-#define GPDMA_BSIZE_64                     (5)  // Burst size = 64
-#define GPDMA_BSIZE_128                    (6)  // Burst size = 128
-#define GPDMA_BSIZE_256                    (7)  // Burst size = 256
+#define GPDMA_BSIZE_1                      (0U) // Burst size = 1
+#define GPDMA_BSIZE_4                      (1U) // Burst size = 4
+#define GPDMA_BSIZE_8                      (2U) // Burst size = 8
+#define GPDMA_BSIZE_16                     (3U) // Burst size = 16
+#define GPDMA_BSIZE_32                     (4U) // Burst size = 32
+#define GPDMA_BSIZE_64                     (5U) // Burst size = 64
+#define GPDMA_BSIZE_128                    (6U) // Burst size = 128
+#define GPDMA_BSIZE_256                    (7U) // Burst size = 256
 
 // Width in Source transfer width and Destination transfer width definitions
-#define GPDMA_WIDTH_BYTE                   (0)  // Width = 1 byte
-#define GPDMA_WIDTH_HALFWORD               (1)  // Width = 2 bytes
-#define GPDMA_WIDTH_WORD                   (2)  // Width = 4 bytes
+#define GPDMA_WIDTH_BYTE                   (0U) // Width = 1 byte
+#define GPDMA_WIDTH_HALFWORD               (1U) // Width = 2 bytes
+#define GPDMA_WIDTH_WORD                   (2U) // Width = 4 bytes
 
 // GPDMA Transfer type and flow control
-#define GPDMA_TRANSFER_M2M_CTRL_DMA        (0)  // Memory to memory - DMA control
-#define GPDMA_TRANSFER_M2P_CTRL_DMA        (1)  // Memory to peripheral - DMA control
-#define GPDMA_TRANSFER_P2M_CTRL_DMA        (2)  // Peripheral to memory - DMA control
-#define GPDMA_TRANSFER_P2P_CTRL_DMA        (3)  // Source peripheral to destination peripheral - DMA control
-#define GPDMA_TRANSFER_P2P_CTRL_DST_PER    (4)  // Source peripheral to destination peripheral - Destination peripheral control
-#define GPDMA_TRANSFER_M2P_CTRL_DST_PER    (5)  // Memory to peripheral - Destination peripheral control
-#define GPDMA_TRANSFER_P2M_CTRL_SRC_PER    (6)  // Peripheral to memory - Source peripheral control
-#define GPDMA_TRANSFER_P2P_CTRL_SRC_PER    (7)  // Source peripheral to destination peripheral - Source peripheral control
+#define GPDMA_TRANSFER_M2M_CTRL_DMA        (0U) // Memory to memory - DMA control
+#define GPDMA_TRANSFER_M2P_CTRL_DMA        (1U) // Memory to peripheral - DMA control
+#define GPDMA_TRANSFER_P2M_CTRL_DMA        (2U) // Peripheral to memory - DMA control
+#define GPDMA_TRANSFER_P2P_CTRL_DMA        (3U) // Source peripheral to destination peripheral - DMA control
+#define GPDMA_TRANSFER_P2P_CTRL_DST_PER    (4U) // Source peripheral to destination peripheral - Destination peripheral control
+#define GPDMA_TRANSFER_M2P_CTRL_DST_PER    (5U) // Memory to peripheral - Destination peripheral control
+#define GPDMA_TRANSFER_P2M_CTRL_SRC_PER    (6U) // Peripheral to memory - Source peripheral control
+#define GPDMA_TRANSFER_P2P_CTRL_SRC_PER    (7U) // Source peripheral to destination peripheral - Source peripheral control
 
 //  GPDMA Configuration register definitions
-#define GPDMA_CONFIG_E                     (1     <<  0)
-#define GPDMA_CONFIG_M0                    (1     <<  1)
-#define GPDMA_CONFIG_M1                    (1     <<  2)
+#define GPDMA_CONFIG_E                     (1U <<  0)
+#define GPDMA_CONFIG_M0                    (1U <<  1)
+#define GPDMA_CONFIG_M1                    (1U <<  2)
 
 // GPDMA Channel Configuration registers definitions
-#define GPDMA_CH_CONFIG_E                  (1     <<  0)
-#define GPDMA_CH_CONFIG_SRC_PERI_POS       (          1)
-#define GPDMA_CH_CONFIG_SRC_PERI_MSK       (0x1F  << GPDMA_CH_CONFIG_SRC_PERI_POS)
-#define GPDMA_CH_CONFIG_SRC_PERI(n)        (((n)  << GPDMA_CH_CONFIG_SRC_PERI_POS) & GPDMA_CH_CONFIG_SRC_PERI_MSK)
-#define GPDMA_CH_CONFIG_DEST_PERI_POS      (          6)
-#define GPDMA_CH_CONFIG_DEST_PERI_MSK      (0x1F  << GPDMA_CH_CONFIG_DEST_PERI_POS)
-#define GPDMA_CH_CONFIG_DEST_PERI(n)       (((n)  << GPDMA_CH_CONFIG_DEST_PERI_POS) & GPDMA_CH_CONFIG_DEST_PERI_MSK)
-#define GPDMA_CH_CONFIG_FLOWCNTRL_POS      (         11)
-#define GPDMA_CH_CONFIG_FLOWCNTRL_MSK      (0x07  << GPDMA_CH_CONFIG_FLOWCNTRL_POS)
-#define GPDMA_CH_CONFIG_FLOWCNTRL(n)       (((n)  << GPDMA_CH_CONFIG_FLOWCNTRL_POS) & GPDMA_CH_CONFIG_FLOWCNTRL_MSK)
-#define GPDMA_CH_CONFIG_IE                 (1     << 14)
-#define GPDMA_CH_CONFIG_ITC                (1     << 15)
-#define GPDMA_CH_CONFIG_L                  (1     << 16)
-#define GPDMA_CH_CONFIG_A                  (1     << 17)
-#define GPDMA_CH_CONFIG_H                  (1     << 18)
+#define GPDMA_CH_CONFIG_E                  (1U <<  0)
+#define GPDMA_CH_CONFIG_SRC_PERI_POS       (      1U)
+#define GPDMA_CH_CONFIG_SRC_PERI_MSK       (0x1FU          << GPDMA_CH_CONFIG_SRC_PERI_POS)
+#define GPDMA_CH_CONFIG_SRC_PERI(n)        ((((uint32_t)n) << GPDMA_CH_CONFIG_SRC_PERI_POS) & GPDMA_CH_CONFIG_SRC_PERI_MSK)
+#define GPDMA_CH_CONFIG_DEST_PERI_POS      (      6U)
+#define GPDMA_CH_CONFIG_DEST_PERI_MSK      (0x1F           << GPDMA_CH_CONFIG_DEST_PERI_POS)
+#define GPDMA_CH_CONFIG_DEST_PERI(n)       (((n)           << GPDMA_CH_CONFIG_DEST_PERI_POS) & GPDMA_CH_CONFIG_DEST_PERI_MSK)
+#define GPDMA_CH_CONFIG_FLOWCNTRL_POS      (     11U)
+#define GPDMA_CH_CONFIG_FLOWCNTRL_MSK      (0x07U          << GPDMA_CH_CONFIG_FLOWCNTRL_POS)
+#define GPDMA_CH_CONFIG_FLOWCNTRL(n)       (((n)           << GPDMA_CH_CONFIG_FLOWCNTRL_POS) & GPDMA_CH_CONFIG_FLOWCNTRL_MSK)
+#define GPDMA_CH_CONFIG_IE                 (1U << 14)
+#define GPDMA_CH_CONFIG_ITC                (1U << 15)
+#define GPDMA_CH_CONFIG_L                  (1U << 16)
+#define GPDMA_CH_CONFIG_A                  (1U << 17)
+#define GPDMA_CH_CONFIG_H                  (1U << 18)
 
 // GPDMA Channel Control register definition
-#define GPDMA_CH_CONTROL_TRANSFERSIZE_POS  (          0)
-#define GPDMA_CH_CONTROL_TRANSFERSIZE_MSK  (0xFFF << GPDMA_CH_CONTROL_TRANSFERSIZE_POS)
+#define GPDMA_CH_CONTROL_TRANSFERSIZE_POS  (         0U)
+#define GPDMA_CH_CONTROL_TRANSFERSIZE_MSK  (0xFFFU << GPDMA_CH_CONTROL_TRANSFERSIZE_POS)
 #define GPDMA_CH_CONTROL_TRANSFERSIZE(n)   (((n)  << GPDMA_CH_CONTROL_TRANSFERSIZE_POS) & GPDMA_CH_CONTROL_TRANSFERSIZE_MSK)
-#define GPDMA_CH_CONTROL_SBSIZE_POS        (         12)
-#define GPDMA_CH_CONTROL_SBSIZE_MSK        (0x03  << GPDMA_CH_CONTROL_SBSIZE_POS)
+#define GPDMA_CH_CONTROL_SBSIZE_POS        (        12U)
+#define GPDMA_CH_CONTROL_SBSIZE_MSK        (0x03U << GPDMA_CH_CONTROL_SBSIZE_POS)
 #define GPDMA_CH_CONTROL_SBSIZE(n)         (((n)  << GPDMA_CH_CONTROL_SBSIZE_POS) & GPDMA_CH_CONTROL_SBSIZE_MSK)
-#define GPDMA_CH_CONTROL_DBSIZE_POS        (         15)
-#define GPDMA_CH_CONTROL_DBSIZE_MSK        (0x03  << GPDMA_CH_CONTROL_DBSIZE_POS)
+#define GPDMA_CH_CONTROL_DBSIZE_POS        (        15U)
+#define GPDMA_CH_CONTROL_DBSIZE_MSK        (0x03U << GPDMA_CH_CONTROL_DBSIZE_POS)
 #define GPDMA_CH_CONTROL_DBSIZE(n)         (((n)  << GPDMA_CH_CONTROL_DBSIZE_POS) & GPDMA_CH_CONTROL_DBSIZE_MSK)
-#define GPDMA_CH_CONTROL_SWIDTH_POS        (         18)
-#define GPDMA_CH_CONTROL_SWIDTH_MSK        (0x03  << GPDMA_CH_CONTROL_SWIDTH_POS)
+#define GPDMA_CH_CONTROL_SWIDTH_POS        (        18U)
+#define GPDMA_CH_CONTROL_SWIDTH_MSK        (0x03U << GPDMA_CH_CONTROL_SWIDTH_POS)
 #define GPDMA_CH_CONTROL_SWIDTH(n)         (((n)  << GPDMA_CH_CONTROL_SWIDTH_POS) & GPDMA_CH_CONTROL_SWIDTH_MSK)
-#define GPDMA_CH_CONTROL_DWIDTH_POS        (         21)
-#define GPDMA_CH_CONTROL_DWIDTH_MSK        (0x03  << GPDMA_CH_CONTROL_DWIDTH_POS)
+#define GPDMA_CH_CONTROL_DWIDTH_POS        (        21U)
+#define GPDMA_CH_CONTROL_DWIDTH_MSK        (0x03U << GPDMA_CH_CONTROL_DWIDTH_POS)
 #define GPDMA_CH_CONTROL_DWIDTH(n)         (((n)  << GPDMA_CH_CONTROL_DWIDTH_POS) & GPDMA_CH_CONTROL_DWIDTH_MSK)
-#define GPDMA_CH_CONTROL_SI                (1     << 26)
-#define GPDMA_CH_CONTROL_DI                (1     << 27)
-#define GPDMA_CH_CONTROL_PROT1             (1     << 28)
-#define GPDMA_CH_CONTROL_PROT2             (1     << 29)
-#define GPDMA_CH_CONTROL_PROT3             (1     << 30)
+#define GPDMA_CH_CONTROL_SI                (1U    << 26)
+#define GPDMA_CH_CONTROL_DI                (1U    << 27)
+#define GPDMA_CH_CONTROL_PROT1             (1U    << 28)
+#define GPDMA_CH_CONTROL_PROT2             (1U    << 29)
+#define GPDMA_CH_CONTROL_PROT3             (1U    << 30)
 #define GPDMA_CH_CONTROL_I                 (1UL   << 31)
 
 // GPDMA Connection number definitions

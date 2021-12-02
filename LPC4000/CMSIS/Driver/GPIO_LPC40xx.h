@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,16 +8,18 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *  
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0.0
+ *
+ * $Date:        21. August 2019
+ * $Revision:    V1.1
  *
  * Project:      GPIO Driver Definitions for NXP LPC40xx
  * -------------------------------------------------------------------------- */
@@ -24,7 +27,7 @@
 #ifndef __GPIO_LPC40XX_H
 #define __GPIO_LPC40XX_H
 
-#include <stdint.h>
+#include "LPC407x_8x_177x_8x.h"
 
 // GPIO identifier
 typedef struct _GPIO_ID {
@@ -33,8 +36,8 @@ typedef struct _GPIO_ID {
 } GPIO_ID;
 
 // GPIO Direction
-#define GPIO_DIR_INPUT     (0)
-#define GPIO_DIR_OUTPUT    (1)
+#define GPIO_DIR_INPUT     (0U)
+#define GPIO_DIR_OUTPUT    (1U)
 
 
 /**

@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ * $Date:        20. December 2019
+ * $Revision:    V1.2
  *
  * Project:      SCU Driver Definitions for NXP LPC18xx
  * -------------------------------------------------------------------------- */
@@ -30,6 +31,7 @@
 typedef struct _PIN_ID {
   uint8_t       port;
   uint8_t       num;
+  uint8_t       reserved[2];
   uint32_t      config_val;
 } PIN_ID;
 
@@ -37,42 +39,42 @@ typedef struct _PIN_ID {
 // SCU REGISTER BIT DEFINITIONS
 //------------------------------------------------------------------------------
 // SCU Pin configuration register for normal-drive pins
-#define SCU_SFS_MODE_POS              (         0 )
-#define SCU_SFS_MODE_MSK              (7    <<  SCU_SFS_MODE_POS)
-#define SCU_SFS_EPD                   (1    <<  3)
-#define SCU_SFS_EPUN                  (1    <<  4)
-#define SCU_SFS_EHS                   (1    <<  5)
-#define SCU_SFS_EZI                   (1    <<  6)
-#define SCU_SFS_ZIF                   (1    <<  7)
+#define SCU_SFS_MODE_POS              (         0U )
+#define SCU_SFS_MODE_MSK              (7U    <<  SCU_SFS_MODE_POS)
+#define SCU_SFS_EPD                   (1U    <<  3)
+#define SCU_SFS_EPUN                  (1U    <<  4)
+#define SCU_SFS_EHS                   (1U    <<  5)
+#define SCU_SFS_EZI                   (1U    <<  6)
+#define SCU_SFS_ZIF                   (1U    <<  7)
 
 // SCU Pin configuration register for high-drive pins
 //    P1_17
 //    P2_3 to P2_5
 //    P8_0 to P8_2
 //    PA_1 to PA_3
-#define SCU_SFS_EHD_POS               (         8 )
-#define SCU_SFS_EHD_MSK               (3    <<  SCU_SFS_EHD_POS)
+#define SCU_SFS_EHD_POS               (         8U )
+#define SCU_SFS_EHD_MSK               (3U    <<  SCU_SFS_EHD_POS)
 
 // SCU Pin configuration register for USB1 pins USB1_DP/USB1_DM
-#define SCU_SFSUSB_AIM                (1    <<  0)
-#define SCU_SFSUSB_ESEA               (1    <<  1)
-#define SCU_SFSUSB_EPD                (1    <<  2)
-#define SCU_SFSUSB_EPWR               (1    <<  4)
-#define SCU_SFSUSB_VBUS               (1    <<  5)
+#define SCU_SFSUSB_AIM                (1U    <<  0)
+#define SCU_SFSUSB_ESEA               (1U    <<  1)
+#define SCU_SFSUSB_EPD                (1U    <<  2)
+#define SCU_SFSUSB_EPWR               (1U    <<  4)
+#define SCU_SFSUSB_VBUS               (1U    <<  5)
 
 // SCU Pin configuration for open-drain I2C pins
-#define SCU_SFSI2C_SCL_EFP            (1    <<  0)
-#define SCU_SFSI2C_SCL_EHD            (1    <<  2)
-#define SCU_SFSI2C_SCL_EZI            (1    <<  3)
-#define SCU_SFSI2C_SCL_ZIF            (1    <<  7)
-#define SCU_SFSI2C_SDA_EFP            (1    <<  8)
-#define SCU_SFSI2C_SDA_EHD            (1    << 10)
-#define SCU_SFSI2C_SDA_EZI            (1    << 11)
-#define SCU_SFSI2C_SDA_ZIF            (1    << 15)
+#define SCU_SFSI2C_SCL_EFP            (1U    <<  0)
+#define SCU_SFSI2C_SCL_EHD            (1U    <<  2)
+#define SCU_SFSI2C_SCL_EZI            (1U    <<  3)
+#define SCU_SFSI2C_SCL_ZIF            (1U    <<  7)
+#define SCU_SFSI2C_SDA_EFP            (1U    <<  8)
+#define SCU_SFSI2C_SDA_EHD            (1U    << 10)
+#define SCU_SFSI2C_SDA_EZI            (1U    << 11)
+#define SCU_SFSI2C_SDA_ZIF            (1U    << 15)
 
 // SCU Analog function select register ENAIO2
-#define SCU_ENAIO2_DAC                (1    <<  0)
-#define SCU_ENAIO2_BG                 (1    <<  4)
+#define SCU_ENAIO2_DAC                (1U    <<  0)
+#define SCU_ENAIO2_BG                 (1U    <<  4)
 
 
 
@@ -80,20 +82,20 @@ typedef struct _PIN_ID {
 // SCU FUNCTION PARAMETER DEFINITIONS
 //------------------------------------------------------------------------------
 // SCU_PIN_CFG_MODE(mode)
-#define SCU_CFG_MODE_FUNC0                    (0)
-#define SCU_CFG_MODE_FUNC1                    (1)
-#define SCU_CFG_MODE_FUNC2                    (2)
-#define SCU_CFG_MODE_FUNC3                    (3)
-#define SCU_CFG_MODE_FUNC4                    (4)
-#define SCU_CFG_MODE_FUNC5                    (5)
-#define SCU_CFG_MODE_FUNC6                    (6)
-#define SCU_CFG_MODE_FUNC7                    (7)
+#define SCU_CFG_MODE_FUNC0                    (0U)
+#define SCU_CFG_MODE_FUNC1                    (1U)
+#define SCU_CFG_MODE_FUNC2                    (2U)
+#define SCU_CFG_MODE_FUNC3                    (3U)
+#define SCU_CFG_MODE_FUNC4                    (4U)
+#define SCU_CFG_MODE_FUNC5                    (5U)
+#define SCU_CFG_MODE_FUNC6                    (6U)
+#define SCU_CFG_MODE_FUNC7                    (7U)
 
 // SCU_PIN_CFG_DRIVER_STRENGTH(ehd) (only for high drive pins)
-#define SCU_CFG_EHD_4mA                       (0)
-#define SCU_CFG_EHD_8mA                       (1)
-#define SCU_CFG_EHD_14mA                      (2)
-#define SCU_CFG_EHD_20mA                      (3)
+#define SCU_CFG_EHD_4mA                       (0U)
+#define SCU_CFG_EHD_8mA                       (1U)
+#define SCU_CFG_EHD_14mA                      (2U)
+#define SCU_CFG_EHD_20mA                      (3U)
 
 // pin_cfg (configuration bit mask)
 #define SCU_PIN_CFG_MODE(mode)                (((mode) & SCU_SFS_MODE_MSK) << SCU_SFS_MODE_POS)

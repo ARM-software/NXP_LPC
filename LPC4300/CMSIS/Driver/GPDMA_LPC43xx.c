@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,13 +16,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.5
+ * $Date:        30. April 2019
+ * $Revision:    V1.6
  *
  * Project:      GPDMA Driver for NXP LPC43xx
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.6
+ *    - Removed Arm Compiler 6 warnings
+ *    - Added timeout to wait loops
  *  Version 1.5
  *    - Corrected transfers bigger than 4k
  *  Version 1.4
@@ -34,7 +38,6 @@
  *    - Corrected peripheral reset
  */
 
-#include "LPC43xx.h"
 #include "GPDMA_LPC43xx.h"
 
 #if   (defined(CORE_M0SUB))
@@ -56,7 +59,7 @@ typedef struct {
   __IO uint32_t  CONTROL;       // DMA Channel Control Register
   __IO uint32_t  CONFIG;        // DMA Channel Configuration Register
   __I  uint32_t  RESERVED1[3];
-} GPDMA_CHANNEL_REG;
+} volatile GPDMA_CHANNEL_REG;
 
 typedef struct {
   uint32_t            SrcAddr;
@@ -71,7 +74,13 @@ static uint32_t Init_cnt       = 0U;
 
 static GPDMA_Channel_Info Channel_info[GPDMA_NUMBER_OF_CHANNELS] = { 0U };
 
-#define GPDMA_CHANNEL(n)  ((GPDMA_CHANNEL_REG *) (&(LPC_GPDMA->C0SRCADDR) + (n * 8U)))
+#define GPDMA_CHANNEL(n)    ((GPDMA_CHANNEL_REG *) (&(LPC_GPDMA->C0SRCADDR) + (n * 8U)))
+
+// Safety timeout to exit the loops
+#define LOOP_MAX_CNT   (SystemCoreClock / 64U)
+
+// Interrupt Handler Prototype
+void MX_DMA_IRQHandler (void);
 
 
 /**
@@ -131,7 +140,7 @@ __inline static void Clear_Channel_active_flag (uint8_t ch) {
    - \b -1: function failed
 */
 int32_t GPDMA_Initialize (void) {
-  uint32_t ch_num;
+  uint32_t ch_num, tout_cnt;
 
   Init_cnt++;
 
@@ -140,7 +149,13 @@ int32_t GPDMA_Initialize (void) {
 
   // Enable DMA clock
   LPC_CCU1->CLK_M4_DMA_CFG |= 1U;
-  while ((LPC_CCU1->CLK_M4_DMA_STAT & 1U) == 0U);
+  tout_cnt = LOOP_MAX_CNT;
+  while ((LPC_CCU1->CLK_M4_DMA_STAT & 1U) == 0U) {
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      return -1;
+    }
+  }
 
   // Reset DMA
   LPC_RGU->RESET_CTRL0 = ((1U << 19) | (~(LPC_RGU->RESET_ACTIVE_STATUS0)));
@@ -155,8 +170,8 @@ int32_t GPDMA_Initialize (void) {
   }
 
   // Clear all DMA interrupt flags
-  LPC_GPDMA->INTTCCLEAR = 0xFF;
-  LPC_GPDMA->INTERRCLR = 0xFF;
+  LPC_GPDMA->INTTCCLEAR = 0xFFU;
+  LPC_GPDMA->INTERRCLR  = 0xFFU;
 
   // Clear and Enable DMA IRQ
   NVIC_ClearPendingIRQ(MX_DMA_IRQn);
@@ -203,7 +218,7 @@ int32_t GPDMA_PeripheralSelect (uint8_t peri, uint8_t sel) {
 
   if ((peri > 15U) || (sel > 3U)) { return -1; }
 
-  LPC_CREG->DMAMUX = (LPC_CREG->DMAMUX & ~(3U   << (2U * peri))) | (sel  << (2U * peri));
+  LPC_CREG->DMAMUX = (LPC_CREG->DMAMUX & ~(3U   << (2U * peri))) | ((uint32_t)sel  << (2U * peri));
 
   return 0;
 }
@@ -236,6 +251,7 @@ int32_t GPDMA_ChannelConfigure (uint8_t              ch,
                                 uint32_t             config,
                                 GPDMA_SignalEvent_t  cb_event) {
   GPDMA_CHANNEL_REG * dma_ch;
+  uint32_t tout_cnt;
 
   // Check if channel is valid
   if (ch >= GPDMA_NUMBER_OF_CHANNELS)     { return -1; }
@@ -261,7 +277,13 @@ int32_t GPDMA_ChannelConfigure (uint8_t              ch,
 
   // Enable DMA Channels, little endian
   LPC_GPDMA->CONFIG = GPDMA_CONFIG_E;
-  while ((LPC_GPDMA->CONFIG & GPDMA_CONFIG_E) == 0U);
+  tout_cnt = LOOP_MAX_CNT;
+  while ((LPC_GPDMA->CONFIG & GPDMA_CONFIG_E) == 0U) {
+    if (tout_cnt-- == 0U) {
+      __NOP();
+      return -1;
+    }
+  }
 
   Channel_info[ch].Size = size;
   if (size > 0x0FFFU) {
@@ -352,7 +374,7 @@ int32_t GPDMA_ChannelDisable (uint8_t ch) {
 uint32_t GPDMA_ChannelGetStatus (uint8_t ch) {
 
   // Check if channel is valid
-  if (ch >= GPDMA_NUMBER_OF_CHANNELS) { return 0U; };
+  if (ch >= GPDMA_NUMBER_OF_CHANNELS) { return 0U; }
 
   if (Channel_active & (1 << ch)) { return 1U; }
   else                            { return 0U; }
@@ -376,7 +398,8 @@ uint32_t GPDMA_ChannelGetCount (uint8_t ch) {
   \brief       DMA interrupt handler
 */
 void MX_DMA_IRQHandler (void) {
-  uint32_t ch, size;
+  uint8_t  ch;
+  uint32_t size;
   GPDMA_CHANNEL_REG * dma_ch;
 
   for (ch = 0; ch < GPDMA_NUMBER_OF_CHANNELS; ch++) {

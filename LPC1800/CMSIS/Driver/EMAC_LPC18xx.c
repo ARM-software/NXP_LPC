@@ -1,5 +1,6 @@
 /* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V2.6
+ * $Date:        20. December 2019
+ * $Revision:    V2.11
  *
  * Driver:       Driver_ETH_MAC0
  * Configured:   via RTE_Device.h configuration file
@@ -31,6 +32,17 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 2.11
+ *    - Updated PIN_ID structure alignment
+ *  Version 2.10
+ *    - Added support for ARM Compiler 6
+ *    - Added timeout to wait loops
+ *  Version 2.9
+ *    - Corrected timeout implementation for RTOS2
+ *  Version 2.8
+ *    - Corrected VLAN filtering
+ *  Version 2.7
+ *    - Added support for CMSIS-RTOS2
  *  Version 2.6
  *    - Corrected PowerControl function for conditional Power full (driver must be initialized)
  *  Version 2.5
@@ -56,56 +68,60 @@
 
 /* IEEE 1588 time stamping enable (PTP) */
 #ifndef EMAC_TIME_STAMP
-#define EMAC_TIME_STAMP         0
+#define EMAC_TIME_STAMP     0U
 #endif
 
 #include "EMAC_LPC18xx.h"
 
-#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,6) /* driver version */
+#define ARM_ETH_MAC_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(2,11) /* driver version     */
 
 /* Timeouts */
-#define PHY_TIMEOUT         200         /* PHY Register access timeout in us  */
+#define PHY_TIMEOUT         200U                    /* PHY Register access timeout in us   */
+#define LOOP_MAX_CNT   (SystemCoreClock / 64U) /* Exit the loop after timeout expires */
 
 /* EMAC Memory Buffer configuration */
-#define NUM_RX_BUF          4           /* 0x1800 for Rx (4*1536=6K)          */
-#define NUM_TX_BUF          2           /* 0x0C00 for Tx (2*1536=3K)          */
-#define ETH_BUF_SIZE        1536        /* ETH Receive/Transmit buffer size   */
+#define NUM_RX_BUF          4U          /* 0x1800 for Rx (4*1536=6K)                       */
+#define NUM_TX_BUF          2U          /* 0x0C00 for Tx (2*1536=3K)                       */
+#define ETH_BUF_SIZE        1536U       /* ETH Receive/Transmit buffer size                */
+
+/* Interrupt Handler Prototype */
+void ETH_IRQHandler (void);
 
 /* EMAC core clock (system_LPC43xx.c) */
 extern uint32_t GetClockFreq (uint32_t clk_src);
 
 /* Ethernet Pin definitions */
 static const PIN_ID eth_pins[] = {
-  { RTE_ENET_MDI_MDC_PORT,     RTE_ENET_MDI_MDC_PIN,                   SCU_SFS_EZI | RTE_ENET_MDI_MDC_FUNC       },
-  { RTE_ENET_MDI_MDIO_PORT,    RTE_ENET_MDI_MDIO_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MDI_MDIO_FUNC      },
+  { RTE_ENET_MDI_MDC_PORT,     RTE_ENET_MDI_MDC_PIN,      {0U, 0U},               SCU_SFS_EZI | RTE_ENET_MDI_MDC_FUNC },
+  { RTE_ENET_MDI_MDIO_PORT,    RTE_ENET_MDI_MDIO_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MDI_MDIO_FUNC },
 #if (RTE_ENET_RMII)
-  { RTE_ENET_RMII_TXD0_PORT,   RTE_ENET_RMII_TXD0_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TXD0_FUNC     },
-  { RTE_ENET_RMII_TXD1_PORT,   RTE_ENET_RMII_TXD1_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TXD1_FUNC     },
-  { RTE_ENET_RMII_TX_EN_PORT,  RTE_ENET_RMII_TX_EN_PIN,  SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TX_EN_FUNC    },
-  { RTE_ENET_RMII_REF_CLK_PORT,RTE_ENET_RMII_REF_CLK_PIN,SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_REF_CLK_FUNC  },
-  { RTE_ENET_RMII_RXD0_PORT,   RTE_ENET_RMII_RXD0_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RXD0_FUNC     },
-  { RTE_ENET_RMII_RXD1_PORT,   RTE_ENET_RMII_RXD1_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RXD1_FUNC     },
-  { RTE_ENET_RMII_RX_DV_PORT,  RTE_ENET_RMII_RX_DV_PIN,  SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RX_DV_FUNC    }
+  { RTE_ENET_RMII_TXD0_PORT,   RTE_ENET_RMII_TXD0_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TXD0_FUNC },
+  { RTE_ENET_RMII_TXD1_PORT,   RTE_ENET_RMII_TXD1_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TXD1_FUNC },
+  { RTE_ENET_RMII_TX_EN_PORT,  RTE_ENET_RMII_TX_EN_PIN,   {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_TX_EN_FUNC },
+  { RTE_ENET_RMII_REF_CLK_PORT,RTE_ENET_RMII_REF_CLK_PIN, {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_REF_CLK_FUNC },
+  { RTE_ENET_RMII_RXD0_PORT,   RTE_ENET_RMII_RXD0_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RXD0_FUNC },
+  { RTE_ENET_RMII_RXD1_PORT,   RTE_ENET_RMII_RXD1_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RXD1_FUNC },
+  { RTE_ENET_RMII_RX_DV_PORT,  RTE_ENET_RMII_RX_DV_PIN,   {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_RMII_RX_DV_FUNC }
 #endif
 #if (RTE_ENET_MII)
-  { RTE_ENET_MII_TXD0_PORT,    RTE_ENET_MII_TXD0_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD0_FUNC      },
-  { RTE_ENET_MII_TXD1_PORT,    RTE_ENET_MII_TXD1_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD1_FUNC      },
-  { RTE_ENET_MII_TXD2_PORT,    RTE_ENET_MII_TXD2_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD2_FUNC      },
-  { RTE_ENET_MII_TXD3_PORT,    RTE_ENET_MII_TXD3_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD3_FUNC      },
-  { RTE_ENET_MII_TX_EN_PORT,   RTE_ENET_MII_TX_EN_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_EN_FUNC     },
-  { RTE_ENET_MII_TX_CLK_PORT,  RTE_ENET_MII_TX_CLK_PIN,  SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_CLK_FUNC    },
+  { RTE_ENET_MII_TXD0_PORT,    RTE_ENET_MII_TXD0_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD0_FUNC },
+  { RTE_ENET_MII_TXD1_PORT,    RTE_ENET_MII_TXD1_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD1_FUNC },
+  { RTE_ENET_MII_TXD2_PORT,    RTE_ENET_MII_TXD2_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD2_FUNC },
+  { RTE_ENET_MII_TXD3_PORT,    RTE_ENET_MII_TXD3_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TXD3_FUNC },
+  { RTE_ENET_MII_TX_EN_PORT,   RTE_ENET_MII_TX_EN_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_EN_FUNC },
+  { RTE_ENET_MII_TX_CLK_PORT,  RTE_ENET_MII_TX_CLK_PIN,   {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_CLK_FUNC },
 #if (RTE_ENET_MII_TX_ER_PIN_EN)
-  { RTE_ENET_MII_TX_ER_PORT,   RTE_ENET_MII_TX_ER_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_ER_FUNC     },
+  { RTE_ENET_MII_TX_ER_PORT,   RTE_ENET_MII_TX_ER_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_TX_ER_FUNC },
 #endif
-  { RTE_ENET_MII_RXD0_PORT,    RTE_ENET_MII_RXD0_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD0_FUNC      },
-  { RTE_ENET_MII_RXD1_PORT,    RTE_ENET_MII_RXD1_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD1_FUNC      },
-  { RTE_ENET_MII_RXD2_PORT,    RTE_ENET_MII_RXD2_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD2_FUNC      },
-  { RTE_ENET_MII_RXD3_PORT,    RTE_ENET_MII_RXD3_PIN,    SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD3_FUNC      },
-  { RTE_ENET_MII_RX_DV_PORT,   RTE_ENET_MII_RX_DV_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_DV_FUNC     },
-  { RTE_ENET_MII_RX_CLK_PORT,  RTE_ENET_MII_RX_CLK_PIN,  SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_CLK_FUNC    },
-  { RTE_ENET_MII_RX_ER_PORT,   RTE_ENET_MII_RX_ER_PIN,   SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_ER_FUNC     },
-  { RTE_ENET_MII_COL_PORT,     RTE_ENET_MII_COL_PIN,     SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_COL_FUNC       },
-  { RTE_ENET_MII_CRS_PORT,     RTE_ENET_MII_CRS_PIN,     SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_CRS_FUNC       },
+  { RTE_ENET_MII_RXD0_PORT,    RTE_ENET_MII_RXD0_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD0_FUNC },
+  { RTE_ENET_MII_RXD1_PORT,    RTE_ENET_MII_RXD1_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD1_FUNC },
+  { RTE_ENET_MII_RXD2_PORT,    RTE_ENET_MII_RXD2_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD2_FUNC },
+  { RTE_ENET_MII_RXD3_PORT,    RTE_ENET_MII_RXD3_PIN,     {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RXD3_FUNC },
+  { RTE_ENET_MII_RX_DV_PORT,   RTE_ENET_MII_RX_DV_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_DV_FUNC },
+  { RTE_ENET_MII_RX_CLK_PORT,  RTE_ENET_MII_RX_CLK_PIN,   {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_CLK_FUNC },
+  { RTE_ENET_MII_RX_ER_PORT,   RTE_ENET_MII_RX_ER_PIN,    {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_RX_ER_FUNC },
+  { RTE_ENET_MII_COL_PORT,     RTE_ENET_MII_COL_PIN,      {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_COL_FUNC },
+  { RTE_ENET_MII_CRS_PORT,     RTE_ENET_MII_CRS_PIN,      {0U, 0U}, SCU_SFS_EHS | SCU_SFS_EZI | RTE_ENET_MII_CRS_FUNC },
 #endif
 };
 
@@ -117,24 +133,27 @@ static const ARM_DRIVER_VERSION DriverVersion = {
 
 /* Driver Capabilities */
 static const ARM_ETH_MAC_CAPABILITIES DriverCapabilities = {
-  0,                                /* checksum_offload_rx_ip4  */
-  0,                                /* checksum_offload_rx_ip6  */
-  0,                                /* checksum_offload_rx_udp  */
-  0,                                /* checksum_offload_rx_tcp  */
-  0,                                /* checksum_offload_rx_icmp */
-  0,                                /* checksum_offload_tx_ip4  */
-  0,                                /* checksum_offload_tx_ip6  */
-  0,                                /* checksum_offload_tx_udp  */
-  0,                                /* checksum_offload_tx_tcp  */
-  0,                                /* checksum_offload_tx_icmp */
+  0U,                               /* checksum_offload_rx_ip4  */
+  0U,                               /* checksum_offload_rx_ip6  */
+  0U,                               /* checksum_offload_rx_udp  */
+  0U,                               /* checksum_offload_rx_tcp  */
+  0U,                               /* checksum_offload_rx_icmp */
+  0U,                               /* checksum_offload_tx_ip4  */
+  0U,                               /* checksum_offload_tx_ip6  */
+  0U,                               /* checksum_offload_tx_udp  */
+  0U,                               /* checksum_offload_tx_tcp  */
+  0U,                               /* checksum_offload_tx_icmp */
   (RTE_ENET_RMII) ?
   ARM_ETH_INTERFACE_RMII :
   ARM_ETH_INTERFACE_MII,            /* media_interface          */
-  0,                                /* mac_address              */
-  1,                                /* event_rx_frame           */
-  1,                                /* event_tx_frame           */
-  1,                                /* event_wakeup             */
-  (EMAC_TIME_STAMP) ? 1 : 0         /* precision_timer          */
+  0U,                               /* mac_address              */
+  1U,                               /* event_rx_frame           */
+  1U,                               /* event_tx_frame           */
+  1U,                               /* event_wakeup             */
+  (EMAC_TIME_STAMP) ? 1U : 0U       /* precision_timer          */
+#if (defined(ARM_ETH_MAC_API_VERSION) && (ARM_ETH_MAC_API_VERSION >= 0x201U))
+, 0U                                /* reserved bits            */
+#endif
 };
 
 /* Local variables */
@@ -159,16 +178,16 @@ static uint32_t crc32_data (const uint8_t *data, uint32_t len);
 static void init_rx_desc (void) {
   uint32_t i,next;
 
-  for (i = 0; i < NUM_RX_BUF; i++) {
+  for (i = 0U; i < NUM_RX_BUF; i++) {
     rx_desc[i].Stat = EMAC_RDES0_OWN;
     rx_desc[i].Ctrl = EMAC_RDES1_RCH | ETH_BUF_SIZE;
     rx_desc[i].Addr = (uint8_t *)&rx_buf[i];
-    next = i + 1;
-    if (next == NUM_RX_BUF) next = 0;
+    next = i + 1U;
+    if (next == NUM_RX_BUF) next = 0U;
     rx_desc[i].Next = &rx_desc[next];
   }
   ENET->DMA_REC_DES_ADDR = (uint32_t)&rx_desc[0];
-  emac.rx_index = 0;
+  emac.rx_index = 0U;
 }
 
 /**
@@ -179,15 +198,15 @@ static void init_rx_desc (void) {
 static void init_tx_desc (void) {
   uint32_t i,next;
 
-  for (i = 0; i < NUM_TX_BUF; i++) {
+  for (i = 0U; i < NUM_TX_BUF; i++) {
     tx_desc[i].CtrlStat = EMAC_TDES0_TCH | EMAC_TDES0_LS | EMAC_TDES0_FS;
     tx_desc[i].Addr     = (uint8_t *)&tx_buf[i];
-    next = i + 1;
-    if (next == NUM_TX_BUF) next = 0;
+    next = i + 1U;
+    if (next == NUM_TX_BUF) next = 0U;
     tx_desc[i].Next     = &tx_desc[next];
   }
   ENET->DMA_TRANS_DES_ADDR = (uint32_t)&tx_desc[0];
-  emac.tx_index = 0;
+  emac.tx_index = 0U;
 }
 
 /**
@@ -201,7 +220,7 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
   uint32_t n;
 
   crc32 ^= __RBIT (val);
-  for (n = 8; n; n--) {
+  for (n = 8U; n; n--) {
     if (crc32 & 0x80000000) {
       crc32 <<= 1;
       crc32  ^= 0x04C11DB7;
@@ -222,7 +241,7 @@ static uint32_t crc32_8bit_rev (uint32_t crc32, uint8_t val) {
 static uint32_t crc32_data (const uint8_t *data, uint32_t len) {
   uint32_t crc;
 
-  for (crc = 0xFFFFFFFF; len; len--) {
+  for (crc = 0xFFFFFFFFU; len; len--) {
     crc = crc32_8bit_rev (crc, *data++);
   }
   return (crc ^ 0xFFFFFFFF);
@@ -264,7 +283,7 @@ static int32_t Initialize (ARM_ETH_MAC_SignalEvent_t cb_event) {
 
   /* Configure EMAC pins */
   for (pin = eth_pins; pin != &eth_pins[sizeof(eth_pins)/sizeof(PIN_ID)]; pin++) {
-    if (pin->port == 0x10) {
+    if (pin->port == 0x10U) {
       SCU_CLK_PinConfigure (pin->num, pin->config_val);
       continue;
     }
@@ -288,11 +307,11 @@ static int32_t Initialize (ARM_ETH_MAC_SignalEvent_t cb_event) {
 static int32_t Uninitialize (void) {
   const PIN_ID *pin;
 
-  emac.flags = 0;
+  emac.flags = 0U;
 
   /* Unconfigure ethernet pins */
   for (pin = eth_pins; pin != &eth_pins[sizeof(eth_pins)/sizeof(PIN_ID)]; pin++) {
-    if (pin->port == 0x10) {
+    if (pin->port == 0x10U) {
       SCU_CLK_PinConfigure (pin->num, 0);
       continue;
     }
@@ -309,7 +328,13 @@ static int32_t Uninitialize (void) {
   \return      \ref execution_status
 */
 static int32_t PowerControl (ARM_POWER_STATE state) {
-  uint32_t clk;
+  uint32_t clk, tout_cnt;
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
@@ -318,7 +343,13 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
 
       /* Reset EMAC peripheral */
       LPC_RGU->RESET_CTRL0 = RGU_RESET_EMAC;
-      while (!(LPC_RGU->RESET_ACTIVE_STATUS0 & RGU_RESET_EMAC));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_RGU->RESET_ACTIVE_STATUS0 & RGU_RESET_EMAC)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          break;
+        }
+      }
 
       /* Disable EMAC peripheral clock */
       LPC_CCU1->CLK_M3_ETHERNET_CFG &= ~CCU_CLK_CFG_RUN;
@@ -330,12 +361,18 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       return ARM_DRIVER_ERROR_UNSUPPORTED;
 
     case ARM_POWER_FULL:
-      if ((emac.flags & EMAC_FLAG_INIT)  == 0) { return ARM_DRIVER_ERROR; }
-      if ((emac.flags & EMAC_FLAG_POWER) != 0) { return ARM_DRIVER_OK; }
+      if ((emac.flags & EMAC_FLAG_INIT)  == 0U) { return ARM_DRIVER_ERROR; }
+      if ((emac.flags & EMAC_FLAG_POWER) != 0U) { return ARM_DRIVER_OK; }
 
       /* Enable EMAC peripheral clock */
       LPC_CCU1->CLK_M3_ETHERNET_CFG |=  CCU_CLK_CFG_AUTO | CCU_CLK_CFG_RUN;
-      while (!(LPC_CCU1->CLK_M3_ETHERNET_STAT & CCU_CLK_STAT_RUN));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_CCU1->CLK_M3_ETHERNET_STAT & CCU_CLK_STAT_RUN)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       /* Configure Ethernet PHY interface mode (MII/RMII) */
       /* EMAC must be reset after changing PHY interface! */
@@ -347,19 +384,31 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
 
       /* Reset EMAC peripheral */
       LPC_RGU->RESET_CTRL0 = RGU_RESET_EMAC;
-      while (!(LPC_RGU->RESET_ACTIVE_STATUS0 & RGU_RESET_EMAC));
+      tout_cnt = LOOP_MAX_CNT;
+      while (!(LPC_RGU->RESET_ACTIVE_STATUS0 & RGU_RESET_EMAC)) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       /* Soft reset EMAC DMA controller */
       ENET->DMA_BUS_MODE |= EMAC_DBMR_SWR;
-      while (ENET->DMA_BUS_MODE & EMAC_DBMR_SWR);
+      tout_cnt = LOOP_MAX_CNT;
+      while (ENET->DMA_BUS_MODE & EMAC_DBMR_SWR) {
+        if (tout_cnt-- == 0U) {
+          __NOP();
+          return ARM_DRIVER_ERROR;
+        }
+      }
 
       /* MDC clock range selection */
       clk = GetClockFreq (CLK_SRC_PLL1);
-      if      (clk >= 150000000) emac.mmar_cr_val = EMAC_MMAR_CR_Div102;
-      else if (clk >= 100000000) emac.mmar_cr_val = EMAC_MMAR_CR_Div62;
-      else if (clk >= 60000000)  emac.mmar_cr_val = EMAC_MMAR_CR_Div42;
-      else if (clk >= 35000000)  emac.mmar_cr_val = EMAC_MMAR_CR_Div26;
-      else if (clk >= 25000000)  emac.mmar_cr_val = EMAC_MMAR_CR_Div16;
+      if      (clk >= 150000000U) emac.mmar_cr_val = EMAC_MMAR_CR_Div102;
+      else if (clk >= 100000000U) emac.mmar_cr_val = EMAC_MMAR_CR_Div62;
+      else if (clk >= 60000000U)  emac.mmar_cr_val = EMAC_MMAR_CR_Div42;
+      else if (clk >= 35000000U)  emac.mmar_cr_val = EMAC_MMAR_CR_Div26;
+      else if (clk >= 25000000U)  emac.mmar_cr_val = EMAC_MMAR_CR_Div16;
       else                       return ARM_DRIVER_ERROR_UNSUPPORTED;
       ENET->MAC_MII_ADDR = emac.mmar_cr_val;
 
@@ -368,12 +417,12 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
         ENET->DMA_BUS_MODE |= EMAC_DBMR_ATDS;
 
         /* Set clock accuracy to 20ns (50MHz) or 50ns (20MHz) */
-        if (clk >= 51000000) {
-          ENET->SUBSECOND_INCR = 20;
+        if (clk >= 51000000U) {
+          ENET->SUBSECOND_INCR = 20U;
           ENET->ADDEND         = (50000000ull << 32) / clk;
         }
         else {
-          ENET->SUBSECOND_INCR = 50;
+          ENET->SUBSECOND_INCR = 50U;
           ENET->ADDEND         = (20000000ull << 32) / clk;
         }
 
@@ -392,8 +441,8 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       ENET->MAC_FLOW_CTRL    = EMAC_MFCR_DZPQ;
 
       /* Initialize Address register */
-      ENET->MAC_ADDR0_HIGH = 0x00000000;
-      ENET->MAC_ADDR0_LOW  = 0x00000000;
+      ENET->MAC_ADDR0_HIGH = 0x00000000U;
+      ENET->MAC_ADDR0_LOW  = 0x00000000U;
 
       /* Disable MAC interrupts */
       ENET->MAC_INTR_MASK  = EMAC_MIMR_PMTIM | EMAC_MIMR_TSIM;
@@ -403,7 +452,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       init_tx_desc ();
 
       /* Enable DMA interrupts */
-      ENET->DMA_STAT   = 0xFFFFFFFF;
+      ENET->DMA_STAT   = 0xFFFFFFFFU;
       ENET->DMA_INT_EN = EMAC_DIER_NIE | EMAC_DIER_RIE | EMAC_DIER_TIE;
 
       /* Enable ethernet interrupts */
@@ -413,9 +462,6 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       emac.frame_end = NULL;
       emac.flags    |= EMAC_FLAG_POWER;
       break;
-
-    default:
-      return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
   
   return ARM_DRIVER_OK;
@@ -471,9 +517,9 @@ static int32_t SetMacAddress (const ARM_ETH_MAC_ADDR *ptr_addr) {
   }
 
   /* Set Ethernet MAC Address registers */
-  ENET->MAC_ADDR0_HIGH = (ptr_addr->b[5] <<  8) |  ptr_addr->b[4];
-  ENET->MAC_ADDR0_LOW  = (ptr_addr->b[3] << 24) | (ptr_addr->b[2] << 16) |
-                         (ptr_addr->b[1] <<  8) |  ptr_addr->b[0];
+  ENET->MAC_ADDR0_HIGH = ((uint32_t)ptr_addr->b[5] <<  8) |  ptr_addr->b[4];
+  ENET->MAC_ADDR0_LOW  = ((uint32_t)ptr_addr->b[3] << 24) | ((uint32_t)ptr_addr->b[2] << 16) |
+                         ((uint32_t)ptr_addr->b[1] <<  8) |  ptr_addr->b[0];
   return ARM_DRIVER_OK;
 }
 
@@ -499,21 +545,21 @@ static int32_t SetAddressFilter (const ARM_ETH_MAC_ADDR *ptr_addr, uint32_t num_
   }
 
   ENET->MAC_FRAME_FILTER &= ~(EMAC_MFFR_HPF | EMAC_MFFR_HMC);
-  ENET->MAC_HASHTABLE_HIGH = 0x00000000;
-  ENET->MAC_HASHTABLE_LOW  = 0x00000000;
+  ENET->MAC_HASHTABLE_HIGH = 0x00000000U;
+  ENET->MAC_HASHTABLE_LOW  = 0x00000000U;
 
-  if (num_addr == 0) {
+  if (num_addr == 0U) {
     return ARM_DRIVER_OK;
   }
 
   /* Calculate 64-bit Hash table for MAC addresses */
   for ( ; num_addr; ptr_addr++, num_addr--) {
-    crc = crc32_data (&ptr_addr->b[0], 6) >> 26;
-    if (crc & 0x20) {
-      ENET->MAC_HASHTABLE_HIGH |= (1 << (crc & 0x1F));
+    crc = crc32_data (&ptr_addr->b[0], 6U) >> 26;
+    if (crc & 0x20U) {
+      ENET->MAC_HASHTABLE_HIGH |= (1U << (crc & 0x1F));
     }
     else {
-      ENET->MAC_HASHTABLE_LOW  |= (1 << crc);
+      ENET->MAC_HASHTABLE_LOW  |= (1U << crc);
     }
   }
   /* Enable both, unicast and hash address filtering */
@@ -559,13 +605,13 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
     tx_desc[emac.tx_index].Size += len;
   }
   /* Fast-copy data fragments to EMAC-DMA buffer */
-  for ( ; len > 7; dst += 8, frame += 8, len -= 8) {
-    ((__packed uint32_t *)dst)[0] = ((__packed uint32_t *)frame)[0];
-    ((__packed uint32_t *)dst)[1] = ((__packed uint32_t *)frame)[1];
+  for ( ; len > 7U; dst += 8U, frame += 8U, len -= 8U) {
+    __UNALIGNED_UINT32_WRITE(&dst[0], __UNALIGNED_UINT32_READ(&frame[0]));
+    __UNALIGNED_UINT32_WRITE(&dst[4], __UNALIGNED_UINT32_READ(&frame[4]));
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1; dst += 2, frame += 2, len -= 2) {
-    ((__packed uint16_t *)dst)[0] = ((__packed uint16_t *)frame)[0];
+  for ( ; len > 1U; dst += 2U, frame += 2U, len -= 2U) {
+    __UNALIGNED_UINT16_WRITE(&dst[0], __UNALIGNED_UINT16_READ(&frame[0]));
   }
   if (len > 0) dst++[0] = frame++[0];
 
@@ -584,12 +630,12 @@ static int32_t SendFrame (const uint8_t *frame, uint32_t len, uint32_t flags) {
 #endif
   tx_desc[emac.tx_index].CtrlStat = ctrl | EMAC_TDES0_OWN;
 
-  if (++emac.tx_index == NUM_TX_BUF) emac.tx_index = 0;
+  if (++emac.tx_index == NUM_TX_BUF) emac.tx_index = 0U;
   emac.frame_end = NULL;
 
   /* Start frame transmission */
   ENET->DMA_STAT = EMAC_DSR_TPS;
-  ENET->DMA_TRANS_POLL_DEMAND = 0;
+  ENET->DMA_TRANS_POLL_DEMAND = 0U;
 
   return ARM_DRIVER_OK;
 }
@@ -619,25 +665,25 @@ static int32_t ReadFrame (uint8_t *frame, uint32_t len) {
 
   /* Fast-copy data to packet buffer */
   src = rx_desc[emac.rx_index].Addr;
-  for ( ; len > 7; frame += 8, src += 8, len -= 8) {
-    ((__packed uint32_t *)frame)[0] = ((uint32_t *)src)[0];
-    ((__packed uint32_t *)frame)[1] = ((uint32_t *)src)[1];
+  for ( ; len > 7U; frame += 8U, src += 8U, len -= 8U) {
+    __UNALIGNED_UINT32_WRITE(&frame[0], __UNALIGNED_UINT32_READ(&src[0]));
+    __UNALIGNED_UINT32_WRITE(&frame[4], __UNALIGNED_UINT32_READ(&src[4]));
   }
   /* Copy remaining 7 bytes */
-  for ( ; len > 1; frame += 2, src += 2, len -= 2) {
-    ((__packed uint16_t *)frame)[0] = ((uint16_t *)src)[0];
+  for ( ; len > 1U; frame += 2U, src += 2U, len -= 2U) {
+    __UNALIGNED_UINT16_WRITE(&frame[0], __UNALIGNED_UINT16_READ(&src[0]));
   }
-  if (len > 0) frame[0] = src[0];
+  if (len > 0U) frame[0] = src[0];
 
   /* Return this block back to EMAC-DMA */
   rx_desc[emac.rx_index].Stat = EMAC_RDES0_OWN;
 
-  if (++emac.rx_index == NUM_RX_BUF) emac.rx_index = 0;
+  if (++emac.rx_index == NUM_RX_BUF) emac.rx_index = 0U;
 
   if (ENET->DMA_STAT & EMAC_DSR_RU) {
     /* Receive buffer unavailable, resume DMA */
     ENET->DMA_STAT = EMAC_DSR_RU;
-    ENET->DMA_REC_POLL_DEMAND = 0;
+    ENET->DMA_REC_POLL_DEMAND = 0U;
   }
   return (cnt);
 }
@@ -652,20 +698,24 @@ static uint32_t GetRxFrameSize (void) {
 
   if (!(emac.flags & EMAC_FLAG_POWER)) {
     /* Driver not yet powered */
-    return (0);
+    return (0U);
   }
 
   stat = rx_desc[emac.rx_index].Stat;
   if (stat & EMAC_RDES0_OWN) {
     /* Owned by DMA */
-    return (0);
+    return (0U);
   }
 
   if ((stat & EMAC_RDES0_ES) || !(stat & EMAC_RDES0_FS) || !(stat & EMAC_RDES0_LS)) {
     /* Error, this block is invalid */
-    return (0xFFFFFFFF);
+    return (0xFFFFFFFFU);
   }
-  return (((stat & EMAC_RDES0_FL) >> 16) - 4);
+  if ((emac.flags & EMAC_FLAG_VLAN) && !(stat & EMAC_RDES0_VLAN)) {
+    /* VLAN filtering, incorrect VID */
+    return (0xFFFFFFFFU);
+  }
+  return (((stat & EMAC_RDES0_FL) >> 16) - 4U);
 }
 
 /**
@@ -693,6 +743,7 @@ static int32_t GetRxFrameTime (ARM_ETH_MAC_TIME *time) {
 
   return ARM_DRIVER_OK;
 #else
+  (void) time;
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 #endif
 }
@@ -725,6 +776,7 @@ static int32_t GetTxFrameTime (ARM_ETH_MAC_TIME *time) {
   time->sec = txd->TimeHi;
   return ARM_DRIVER_OK;
 #else
+  (void) time;
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 #endif
 }
@@ -805,7 +857,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
 
     case ARM_ETH_MAC_CONTROL_TX:
       /* Enable/disable MAC transmitter */
-      if (arg != 0) {
+      if (arg != 0U) {
         ENET->MAC_CONFIG  |= EMAC_MCR_TE;
         ENET->DMA_OP_MODE |= EMAC_DOMR_ST;
       }
@@ -817,7 +869,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
 
     case ARM_ETH_MAC_CONTROL_RX:
       /* Enable/disable MAC receiver */
-      if (arg != 0) {
+      if (arg != 0U) {
         ENET->MAC_CONFIG  |= EMAC_MCR_RE;
         ENET->DMA_OP_MODE |= EMAC_DOMR_SR;
       }
@@ -849,7 +901,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
 
     case ARM_ETH_MAC_SLEEP:
       /* Enable/disable Sleep mode */
-      if (arg != 0) {
+      if (arg != 0U) {
         /* Enable Power Management interrupts */
         ENET->MAC_INTR_MASK    &= ~EMAC_MIMR_PMTIM;
         /* Enter Power-down, Magic packet enable */
@@ -858,13 +910,21 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       else {
         /* Disable Power Management interrupts */
         ENET->MAC_INTR_MASK    |= EMAC_MIMR_PMTIM;
-        ENET->MAC_PMT_CTRL_STAT = 0x00000000;
+        ENET->MAC_PMT_CTRL_STAT = 0x00000000U;
       }
       break;
 
     case ARM_ETH_MAC_VLAN_FILTER:
       /* Configure VLAN filter */
       ENET->MAC_VLAN_TAG = arg;
+      if (arg != 0U) {
+        /* Enable VLAN filtering */
+        emac.flags |=  EMAC_FLAG_VLAN;
+      }
+      else {
+        /* Disable VLAN filtering */
+        emac.flags &= ~EMAC_FLAG_VLAN;
+      }
       break;
 
     default:
@@ -914,7 +974,7 @@ static int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time) {
     case ARM_ETH_MAC_TIMER_DEC_TIME:
       /* Decrement current time */
       ENET->SECONDSUPDATE     = time->sec;
-      ENET->NANOSECONDSUPDATE = time->ns | 0x80000000;
+      ENET->NANOSECONDSUPDATE = time->ns | 0x80000000U;
       /* Update precision timer */
       ENET->MAC_TIMESTP_CTRL |=  EMAC_MTCR_TSUPDT;
       break;
@@ -947,6 +1007,8 @@ static int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time) {
   }
   return ARM_DRIVER_OK;
 #else
+  (void)control;
+  (void)time;
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 #endif
 }
@@ -960,7 +1022,7 @@ static int32_t ControlTimer (uint32_t control, ARM_ETH_MAC_TIME *time) {
   \return      \ref execution_status
 */
 static int32_t PHY_Read (uint8_t phy_addr, uint8_t reg_addr, uint16_t *data) {
-  uint32_t tick;
+  uint32_t tick, phy_addr_32, reg_addr_32;
 
   if (!data) {
     /* Invalid parameter */
@@ -972,17 +1034,27 @@ static int32_t PHY_Read (uint8_t phy_addr, uint8_t reg_addr, uint16_t *data) {
     return ARM_DRIVER_ERROR;
   }
 
-  ENET->MAC_MII_ADDR  = emac.mmar_cr_val | EMAC_MMAR_GB |
-                        (phy_addr << 11) | (reg_addr << 6);
+  phy_addr_32 = phy_addr;
+  reg_addr_32 = reg_addr;
+  ENET->MAC_MII_ADDR  = emac.mmar_cr_val     | EMAC_MMAR_GB |
+                        (phy_addr_32 << 11) | (reg_addr_32 << 6);
 
   /* Wait until operation completed */
+#if   defined(RTE_CMSIS_RTOS2)
+  tick = osKernelGetSysTimerCount();
+#elif defined(RTE_CMSIS_RTOS)
   tick = osKernelSysTick();
+#endif
   do {
     if (!(ENET->MAC_MII_ADDR & EMAC_MMAR_GB)) {
       *data = ENET->MAC_MII_DATA & EMAC_MMDR_GD;
       return ARM_DRIVER_OK;
     }
+#if   defined(RTE_CMSIS_RTOS2)
+  } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
+#elif defined(RTE_CMSIS_RTOS)
   } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
+#endif
 
   if (!(ENET->MAC_MII_ADDR & EMAC_MMAR_GB)) {
     *data = ENET->MAC_MII_DATA & EMAC_MMDR_GD;
@@ -1009,15 +1081,23 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
 
   ENET->MAC_MII_DATA  = data;
   ENET->MAC_MII_ADDR  = emac.mmar_cr_val | EMAC_MMAR_GB | EMAC_MMAR_W |
-                        (phy_addr << 11) | (reg_addr << 6);
+                        ((uint32_t)phy_addr << 11) | ((uint32_t)reg_addr << 6);
 
   /* Wait until operation completed */
+#if   defined(RTE_CMSIS_RTOS2)
+  tick = osKernelGetSysTimerCount();
+#elif defined(RTE_CMSIS_RTOS)
   tick = osKernelSysTick();
+#endif
   do {
     if (!(ENET->MAC_MII_ADDR & EMAC_MMAR_GB)) {
       return ARM_DRIVER_OK;
     }
+#if   defined(RTE_CMSIS_RTOS2)
+  } while ((osKernelGetSysTimerCount() - tick) < (((uint64_t)PHY_TIMEOUT * osKernelGetSysTimerFreq()) / 1000000U));
+#elif defined(RTE_CMSIS_RTOS)
   } while ((osKernelSysTick() - tick) < osKernelSysTickMicroSec(PHY_TIMEOUT));
+#endif
 
   if (!(ENET->MAC_MII_ADDR & EMAC_MMAR_GB)) {
     return ARM_DRIVER_OK;
@@ -1030,7 +1110,7 @@ static int32_t PHY_Write (uint8_t phy_addr, uint8_t reg_addr, uint16_t data) {
   \brief       Ethernet Interrupt handler.
 */
 void ETH_IRQHandler (void) {
-  uint32_t stat,event = 0;
+  uint32_t stat,event = 0U;
 
   stat = ENET->DMA_STAT;
   ENET->DMA_STAT = stat & (EMAC_DSR_NIS | EMAC_DSR_RI | EMAC_DSR_TI);

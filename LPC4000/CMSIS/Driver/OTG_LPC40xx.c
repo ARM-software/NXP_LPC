@@ -1,5 +1,6 @@
-/* -----------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,13 +16,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.0
+ *
+ * $Date:        15. Januar 2020
+ * $Revision:    V1.2
  *
  * Project:      USB common (Device and Host) module for NXP LPC40xx
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.2
+ *    Removed minor compiler warnings
+ *  Version 1.1
+ *    Added auto-detection of OTG Transceiver I2C address
  *  Version 1.0
  *    Initial release
  */
@@ -49,13 +55,32 @@
 #define USB_I2C_OTG_TRANSCEIVER_ADDR   (0x2D)
 #endif
 
+#define USB_I2C_OTG_TRANSCEIVER_ADDR_MSB (0x2C)
+
+//Function Prototypes
+void USB_IRQHandler (void);
+int32_t USB_I2C_RegisterRead (uint8_t i2c_addr, uint8_t reg_addr);
+int32_t USB_I2C_RegisterWrite (uint8_t i2c_addr, uint8_t reg_addr, uint8_t reg_val);
+int32_t USB_I2C_Initialize (void);
+int32_t USB_I2C_Uninitialize (void);
+int32_t USB_I2C_DpPullUp (bool enable);
+int32_t USB_I2C_ControlDmPullUp (bool enable);
+int32_t USB_I2C_ControlPullDowns (bool enable);
+
+//External functions
 extern void SystemCoreClockUpdate (void);
+extern int32_t USB_PinsUnconfigure (void);
+extern int32_t USB_PinsConfigure (void);
 
-       uint8_t  usb_role     = ARM_USB_ROLE_NONE;
-       uint8_t  usb_state    = 0U;
-       uint8_t  usb_pin_cfg  = 0U;
+extern uint8_t usb_role;
+extern uint8_t usb_state;
+extern uint8_t usb_pin_cfg;
 
+uint8_t usb_role = ARM_USB_ROLE_NONE;
+uint8_t usb_state = 0U;
+uint8_t usb_pin_cfg = 0U;
 static uint8_t  usb_i2c_init = 0U;
+static uint8_t  usb_i2c_addr = 0U;
 //static uint16_t usb_i2c_id = 0U;
 
 #ifdef RTE_Drivers_USBH0
@@ -79,13 +104,16 @@ int32_t USB_I2C_RegisterRead (uint8_t i2c_addr, uint8_t reg_addr) {
   if (usb_i2c_init == 0U) { return -1; }
 
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    (i2c_addr << 1)             // I2C Address
+                    ((uint32_t)i2c_addr << 1)   // I2C Address
                                     ;           // Write request
-  while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
+  while ((LPC_USB->I2C_STS & 1U) == 0U);        // Wait for transaction done
+  if ((LPC_USB->I2C_STS & (1U << 2)) != 0U) {   // If there was no acknowledge
+    return -1;
+  }
   LPC_USB->I2C_TX =  reg_addr;                  // Register address to read from
-  while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
+  while ((LPC_USB->I2C_STS & 1U) == 0U);        // Wait for transaction done
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    (i2c_addr << 1) |           // I2C Address
+                    ((uint32_t)i2c_addr << 1) | // I2C Address
                     (      1U     ) ;           // Read request
   LPC_USB->I2C_TX = (      1U << 9) |           // STOP bit on end
                         0x55U       ;           // Dummy data transmit to receive
@@ -110,13 +138,17 @@ int32_t USB_I2C_RegisterWrite (uint8_t i2c_addr, uint8_t reg_addr, uint8_t reg_v
   if (usb_i2c_init == 0U) { return -1; }
 
   LPC_USB->I2C_TX = (      1U << 8) |           // START bit on transmit start
-                    (i2c_addr << 1)             // I2C Address
+                    ((uint32_t)i2c_addr << 1)   // I2C Address
                                     ;           // Write request
-  while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
+  while ((LPC_USB->I2C_STS & 1U) == 0U);        // Wait for transaction done
+  if ((LPC_USB->I2C_STS & (1U << 2)) != 0U) {   // If there was no acknowledge
+    return -1;
+  }
   LPC_USB->I2C_TX =  reg_addr;                  // Register address to write to
-  while ((LPC_USB->I2C_STS & (1U << 11)) == 0U);// Wait for Tx FIFO empty
+  while ((LPC_USB->I2C_STS & 1U) == 0U);        // Wait for transaction done
   LPC_USB->I2C_TX = (      1U << 9) |           // STOP bit on end
                      reg_val        ;           // Register value to write
+  while ((LPC_USB->I2C_STS & 1U) == 0U);        // Wait for transaction done
   while ((LPC_USB->I2C_STS & (1U << 5)) != 0U); // Wait for STOP condition
 
   return 0;
@@ -130,6 +162,7 @@ int32_t USB_I2C_RegisterWrite (uint8_t i2c_addr, uint8_t reg_addr, uint8_t reg_v
                - value -1: I2C initialization has failed
 */
 int32_t USB_I2C_Initialize (void) {
+  uint8_t addr;
 
   if (usb_i2c_init != 0U) { return 0U; }
 
@@ -147,9 +180,23 @@ int32_t USB_I2C_Initialize (void) {
 
   usb_i2c_init = 1U;
 
+  // Auto-detect I2C address
+  addr = USB_I2C_OTG_TRANSCEIVER_ADDR_MSB;
+  if        ((USB_I2C_RegisterRead (addr,    0x00U) | (USB_I2C_RegisterRead (addr,    0x01U) << 8)) == 0x058DU) {
+    usb_i2c_addr = addr;
+  } else if ((USB_I2C_RegisterRead (addr+1U, 0x00U) | (USB_I2C_RegisterRead (addr+1U, 0x01U) << 8)) == 0x058DU) {
+    usb_i2c_addr = addr + 1U;
+  } else if ((USB_I2C_RegisterRead (addr+2U, 0x00U) | (USB_I2C_RegisterRead (addr+2U, 0x01U) << 8)) == 0x058DU) {
+    usb_i2c_addr = addr + 2U;
+  } else if ((USB_I2C_RegisterRead (addr+3U, 0x00U) | (USB_I2C_RegisterRead (addr+3U, 0x01U) << 8)) == 0x058DU) {
+    usb_i2c_addr = addr + 3U;
+  } else {
+    usb_i2c_addr = USB_I2C_OTG_TRANSCEIVER_ADDR;
+  }
+
   // Get Transceiver ID:
   //   - MIC2555 Transceiver ID: 0x058D
-  // usb_i2c_id = USB_I2C_RegisterRead (USB_I2C_OTG_TRANSCEIVER_ADDR, 0x00) | (USB_I2C_RegisterRead (USB_I2C_OTG_TRANSCEIVER_ADDR, 0x01) << 8);
+  // usb_i2c_id = USB_I2C_RegisterRead (usb_i2c_addr, 0x00) | (USB_I2C_RegisterRead (usb_i2c_addr, 0x01) << 8);
 
   return 0U;
 }
@@ -188,7 +235,7 @@ int32_t USB_I2C_Uninitialize (void) {
 int32_t USB_I2C_DpPullUp (bool enable) {
 
   // Control Register 2: dp_pull_up bit
-  return (USB_I2C_RegisterWrite (USB_I2C_OTG_TRANSCEIVER_ADDR, 0x06U + (enable == 0U), 0x01));
+  return (USB_I2C_RegisterWrite (usb_i2c_addr, 0x06U + (enable == 0U), 0x01));
 }
 
 /**
@@ -204,7 +251,7 @@ int32_t USB_I2C_DpPullUp (bool enable) {
 int32_t USB_I2C_ControlDmPullUp (bool enable) {
 
   // Control Register 2: dm_pull_up bit
-  return (USB_I2C_RegisterWrite (USB_I2C_OTG_TRANSCEIVER_ADDR, 0x06U + (enable == 0U), 0x02));
+  return (USB_I2C_RegisterWrite (usb_i2c_addr, 0x06U + (enable == 0U), 0x02));
 }
 
 /**
@@ -220,7 +267,7 @@ int32_t USB_I2C_ControlDmPullUp (bool enable) {
 int32_t USB_I2C_ControlPullDowns (bool enable) {
 
   // Control Register 2: dm_pull_down and dp_pull_down bits
-  return (USB_I2C_RegisterWrite (USB_I2C_OTG_TRANSCEIVER_ADDR, 0x06U + (enable == 0U), 0x0C));
+  return (USB_I2C_RegisterWrite (usb_i2c_addr, 0x06U + (enable == 0U), 0x0C));
 }
 
 /**

@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,8 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.3
+ *
+ * $Date:        10. Januar 2020
+ * $Revision:    V1.5
  *
  * Driver:       Driver_MCI0
  * Configured:   via RTE_Device.h configuration file
@@ -31,6 +33,10 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.5
+ *    - Removed minor compiler warnings
+ *  Version 1.4
+ *    - Removed Arm Compiler 6 warnings
  *  Version 1.3
  *    - Driver update to work with GPDMA_LPC17xx ver.: 1.3
  *  Version 1.2
@@ -45,7 +51,9 @@
 
 #include "MCI_LPC177x_8x.h"
 
-#define ARM_MCI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,3)  /* driver version */
+#define ARM_MCI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,5)  /* driver version */
+
+extern ARM_DRIVER_MCI Driver_MCI0;
 
 /* DMA callback function */
 void RX_DMA_Complete(uint32_t event);
@@ -94,7 +102,8 @@ static const ARM_MCI_CAPABILITIES DriverCapabilities = {
   0U,                                             /* mmc_boot          */
   0U,                                             /* rst_n             */
   0U,                                             /* ccs               */
-  0U                                              /* ccs_timeout       */
+  0U,                                             /* ccs_timeout       */
+  0U                                              /* Reserved          */
 };
 
 
@@ -131,14 +140,14 @@ static int32_t Initialize (ARM_MCI_SignalEvent_t cb_event) {
   SystemCoreClockUpdate();
 
   /* Configure SD_CMD, SD_CLK and SD_DAT0 pins */
-  PIN_Configure (RTE_SD_CMD_PORT,  RTE_SD_CMD_PIN,  2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
-  PIN_Configure (RTE_SD_CLK_PORT,  RTE_SD_CLK_PIN,  2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
-  PIN_Configure (RTE_SD_DAT0_PORT, RTE_SD_DAT0_PIN, 2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_CMD_PORT,  RTE_SD_CMD_PIN,  2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_CLK_PORT,  RTE_SD_CLK_PIN,  2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_DAT0_PORT, RTE_SD_DAT0_PIN, 2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
 
   #if (MCI_BUS_WIDTH_4 != 0U)
-  PIN_Configure (RTE_SD_DAT1_PORT, RTE_SD_DAT1_PIN, 2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
-  PIN_Configure (RTE_SD_DAT2_PORT, RTE_SD_DAT2_PIN, 2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
-  PIN_Configure (RTE_SD_DAT3_PORT, RTE_SD_DAT3_PIN, 2 | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_DAT1_PORT, RTE_SD_DAT1_PIN, 2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_DAT2_PORT, RTE_SD_DAT2_PIN, 2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
+  PIN_Configure (RTE_SD_DAT3_PORT, RTE_SD_DAT3_PIN, 2U | IOCON_MODE_PLAIN | IOCON_SLEW_ENABLE);
   #endif
 
   /* Configure CD (Card Detect) Pin */
@@ -155,11 +164,11 @@ static int32_t Initialize (ARM_MCI_SignalEvent_t cb_event) {
 
   /* Configure SD_PWR (Power Supply Enable) Pin */
   #if (MCI_PWR_PIN != 0U)
-  PIN_Configure (RTE_SD_PWR_PORT, RTE_SD_PWR_PIN, 2 | IOCON_MODE_PLAIN);
+  PIN_Configure (RTE_SD_PWR_PORT, RTE_SD_PWR_PIN, 2U | IOCON_MODE_PLAIN);
   
   if (RTE_SD_PWR_ACTIVE == 0) {
     /* Configure MCIPWR Active Level in System Control register */
-    LPC_SC->SCS &= ~SC_SCS_MCIPWRAL;
+    LPC_SC->SCS &= (uint32_t)~SC_SCS_MCIPWRAL;
   }
   else {
     LPC_SC->SCS |=  SC_SCS_MCIPWRAL;
@@ -170,7 +179,7 @@ static int32_t Initialize (ARM_MCI_SignalEvent_t cb_event) {
   GPDMA_Initialize ();
 
   /* Enable DMA request from SD peripheral */
-  GPDMA_PeripheralSelect (GPDMA_CONN_SD_CARD, 0);
+  GPDMA_PeripheralSelect (GPDMA_CONN_SD_CARD, 0U);
 
   /* Clear control structure */
   memset (&MCI, 0, sizeof (MCI_INFO));
@@ -192,37 +201,37 @@ static int32_t Uninitialize (void) {
   MCI.flags = 0U;
 
   /* Disable DMA request from SD peripheral */
-  GPDMA_PeripheralSelect (GPDMA_CONN_SD_CARD, 0);
+  GPDMA_PeripheralSelect (GPDMA_CONN_SD_CARD, 0U);
 
   /* DMA Uninitialize */
   GPDMA_Uninitialize ();
 
   /* Reset SD_CMD, SD_CLK and SD_DAT0 pins to default state */
-  PIN_Configure (RTE_SD_CMD_PORT,  RTE_SD_CMD_PIN,  0);
-  PIN_Configure (RTE_SD_CLK_PORT,  RTE_SD_CLK_PIN,  0);
-  PIN_Configure (RTE_SD_DAT0_PORT, RTE_SD_DAT0_PIN, 0);
+  PIN_Configure (RTE_SD_CMD_PORT,  RTE_SD_CMD_PIN,  0U);
+  PIN_Configure (RTE_SD_CLK_PORT,  RTE_SD_CLK_PIN,  0U);
+  PIN_Configure (RTE_SD_DAT0_PORT, RTE_SD_DAT0_PIN, 0U);
 
   #if (MCI_BUS_WIDTH_4 != 0U)
-  PIN_Configure (RTE_SD_DAT1_PORT, RTE_SD_DAT1_PIN, 0);
-  PIN_Configure (RTE_SD_DAT2_PORT, RTE_SD_DAT2_PIN, 0);
-  PIN_Configure (RTE_SD_DAT3_PORT, RTE_SD_DAT3_PIN, 0);
+  PIN_Configure (RTE_SD_DAT1_PORT, RTE_SD_DAT1_PIN, 0U);
+  PIN_Configure (RTE_SD_DAT2_PORT, RTE_SD_DAT2_PIN, 0U);
+  PIN_Configure (RTE_SD_DAT3_PORT, RTE_SD_DAT3_PIN, 0U);
   #endif
 
   /* Configure CD (Card Detect) Pin */
   #if (MCI_CD_PIN != 0U)
   GPIO_SetDir (RTE_SD_CD_PORT, RTE_SD_CD_PIN, GPIO_DIR_INPUT);
-  PIN_Configure (RTE_SD_CD_PORT, RTE_SD_CD_PIN, 0);
+  PIN_Configure (RTE_SD_CD_PORT, RTE_SD_CD_PIN, 0U);
   #endif
 
   /* Configure WP (Write Protect) Pin */
   #if (MCI_WP_PIN != 0U)
   GPIO_SetDir (RTE_SD_WP_PORT, RTE_SD_WP_PIN, GPIO_DIR_INPUT);
-  PIN_Configure (RTE_SD_WP_PORT, RTE_SD_WP_PIN, 0);
+  PIN_Configure (RTE_SD_WP_PORT, RTE_SD_WP_PIN, 0U);
   #endif
 
   /* Configure SD_PWR (Power Supply Enable) Pin */
   #if (MCI_PWR_PIN != 0U)
-  PIN_Configure (RTE_SD_PWR_PORT, RTE_SD_PWR_PIN, 0);
+  PIN_Configure (RTE_SD_PWR_PORT, RTE_SD_PWR_PIN, 0U);
   #endif
 
   return ARM_DRIVER_OK;
@@ -236,6 +245,12 @@ static int32_t Uninitialize (void) {
   \return        \ref execution_status
 */
 static int32_t PowerControl (ARM_POWER_STATE state) {
+
+  if ((state != ARM_POWER_OFF)  &&
+      (state != ARM_POWER_FULL) &&
+      (state != ARM_POWER_LOW)) {
+      return ARM_DRIVER_ERROR_PARAMETER;
+  }
 
   switch (state) {
     case ARM_POWER_OFF:
@@ -297,7 +312,7 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
                        MCI_MASK0_CMDCRCFAIL  ;
 
       /* Set max data timeout */
-      LPC_MCI->DATATMR = 0xFFFFFFFF;
+      LPC_MCI->DATATMR = 0xFFFFFFFFU;
 
       /* Enable clock to the card (SDIO_CK) */
       LPC_MCI->POWER = MCI_PWR_CTRL_1 | MCI_PWR_CTRL_0;
@@ -310,7 +325,6 @@ static int32_t PowerControl (ARM_POWER_STATE state) {
       break;
 
     case ARM_POWER_LOW:
-    default:
       return ARM_DRIVER_ERROR_UNSUPPORTED;
   }
   return ARM_DRIVER_OK;
@@ -331,7 +345,7 @@ static int32_t CardPower (uint32_t voltage) {
   /* Power on/off is supported */
   switch (voltage & ARM_MCI_POWER_VDD_Msk) {
     case ARM_MCI_POWER_VDD_OFF:
-      LPC_MCI->POWER &= ~MCI_PWR_CTRL;
+      LPC_MCI->POWER &= (uint32_t)~MCI_PWR_CTRL;
       return ARM_DRIVER_OK;
 
     case ARM_MCI_POWER_VDD_3V3:
@@ -421,10 +435,10 @@ static int32_t SendCommand (uint32_t cmd, uint32_t arg, uint32_t flags, uint32_t
     clock = LPC_MCI->CLOCK;
 
     if (((clock & MCI_CLOCK_ENABLE) == 0) || ((clock & MCI_CLOCK_PWRSAVE) != 0)) {
-      LPC_MCI->CLOCK = (LPC_MCI->CLOCK & ~MCI_CLOCK_PWRSAVE) | MCI_CLOCK_ENABLE;
+      LPC_MCI->CLOCK = (LPC_MCI->CLOCK & ((uint32_t)~MCI_CLOCK_PWRSAVE)) | MCI_CLOCK_ENABLE;
 
-      for (i = 20000; i; i--) {
-        ; /* Wait for approximate 500us @ 120MHz */
+      for (i = 20000U; i; i--) {
+        __NOP(); /* Wait for approximate 500us @ 120MHz */
       }
       LPC_MCI->CLOCK = clock;
     }
@@ -489,9 +503,9 @@ static int32_t SendCommand (uint32_t cmd, uint32_t arg, uint32_t flags, uint32_t
 static int32_t SetupTransfer (uint8_t *data, uint32_t block_count, uint32_t block_size, uint32_t mode) {
   uint32_t sz, cnt, dctrl;
 
-  if ((data == NULL) || (block_count == 0U) || (block_size == 0U)) { return ARM_DRIVER_ERROR_PARAMETER; }
+  if ((data == NULL) || (block_count == 0U) || (block_size == 0U)) return ARM_DRIVER_ERROR_PARAMETER;
 
-  if ((MCI.flags & MCI_SETUP) == 0U) {
+  if (!(MCI.flags & MCI_SETUP)) {
     return ARM_DRIVER_ERROR;
   }
   if (MCI.status.transfer_active) {
@@ -545,7 +559,7 @@ static int32_t SetupTransfer (uint8_t *data, uint32_t block_count, uint32_t bloc
     GPDMA_ChannelConfigure ((uint32_t)RTE_SD_DMA_CH,
                             (uint32_t)data,
                             (uint32_t)&(LPC_MCI->FIFO),
-                            0,
+                            0U,
                             GPDMA_CH_CONTROL_SBSIZE (GPDMA_BSIZE_8)    |
                             GPDMA_CH_CONTROL_DBSIZE (GPDMA_BSIZE_8)    |
                             GPDMA_CH_CONTROL_SWIDTH (GPDMA_WIDTH_WORD) |
@@ -564,7 +578,7 @@ static int32_t SetupTransfer (uint8_t *data, uint32_t block_count, uint32_t bloc
     GPDMA_ChannelConfigure ((uint32_t)RTE_SD_DMA_CH,
                             (uint32_t)&(LPC_MCI->FIFO),
                             (uint32_t)data,
-                            0,
+                            0U,
                             GPDMA_CH_CONTROL_SBSIZE (GPDMA_BSIZE_8)    |
                             GPDMA_CH_CONTROL_DBSIZE (GPDMA_BSIZE_8)    |
                             GPDMA_CH_CONTROL_SWIDTH (GPDMA_WIDTH_WORD) |
@@ -582,7 +596,7 @@ static int32_t SetupTransfer (uint8_t *data, uint32_t block_count, uint32_t bloc
   MCI.dlen   = cnt;
   MCI.dctrl  = dctrl | (sz << 4) | MCI_DATACTRL_DMAENABLE;
 
-  return (ARM_DRIVER_OK);
+  return ARM_DRIVER_OK;
 }
 
 
@@ -655,13 +669,13 @@ static int32_t Control (uint32_t control, uint32_t arg) {
         if (clkdiv > 0)   { clkdiv -= 1; }
         if (clkdiv > 0xFF){ clkdiv  = 0xFF; }
 
-        LPC_MCI->CLOCK = (LPC_MCI->CLOCK & ~MCI_CLOCK_CLKDIV)  |
+        LPC_MCI->CLOCK = (LPC_MCI->CLOCK & ((uint32_t)~MCI_CLOCK_CLKDIV))  |
                           MCI_CLOCK_ENABLE | clkdiv;
         bps = pclk / 2 * (clkdiv + 1U);
       }
 
       for (val = (pclk/5000000U)*20U; val; val--) {
-        ; /* Wait a bit to get stable clock */
+        __NOP(); /* Wait a bit to get stable clock */
       }
 
       /* Bus speed configured */
@@ -688,7 +702,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
           break;
         case ARM_MCI_BUS_CMD_PUSH_PULL:
           /* Configure command line in push-pull mode */
-          LPC_MCI->POWER &= ~MCI_PWR_OPENDRAIN;
+          LPC_MCI->POWER &= (uint32_t)~MCI_PWR_OPENDRAIN;
           break;
         default:
           return ARM_DRIVER_ERROR_UNSUPPORTED;
@@ -699,7 +713,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
       switch (arg) {
         case ARM_MCI_BUS_DATA_WIDTH_1:
           /* Configure 1-bit data bus width */
-          LPC_MCI->CLOCK &= ~MCI_CLOCK_WIDEBUS;
+          LPC_MCI->CLOCK &= (uint32_t)~MCI_CLOCK_WIDEBUS;
           break;
         case ARM_MCI_BUS_DATA_WIDTH_4:
           /* Configure 4-bit data bus width */
@@ -714,7 +728,7 @@ static int32_t Control (uint32_t control, uint32_t arg) {
     case ARM_MCI_CONTROL_CLOCK_IDLE:
       if (arg) {
         /* Clock generation enabled when idle */
-        LPC_MCI->CLOCK &= ~MCI_CLOCK_PWRSAVE;
+        LPC_MCI->CLOCK &= (uint32_t)~MCI_CLOCK_PWRSAVE;
       }
       else {
         /* Clock generation disabled when idle */
@@ -887,6 +901,7 @@ void MCI_IRQHandler (void) {
 
 /* Rx DMA Callback */
 void RX_DMA_Complete (uint32_t event) {
+  (void)event;
 
   MCI.status.transfer_active = 0U;
 

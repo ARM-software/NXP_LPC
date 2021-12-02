@@ -1,5 +1,6 @@
-/* --------------------------------------------------------------------------
- * Copyright (c) 2013-2016 ARM Limited. All rights reserved.
+/* -------------------------------------------------------------------------- 
+ * Copyright (c) 2013-2019 Arm Limited (or its affiliates). All 
+ * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,7 +8,7 @@
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an AS IS BASIS, WITHOUT
@@ -15,21 +16,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * $Date:        02. March 2016
- * $Revision:    V1.1
+ *
+ * $Date:        01. August 2019
+ * $Revision:    V1.2
  *
  * Project:      GPIO Driver for LPC17xx
  * -------------------------------------------------------------------------- */
 
+#include "GPIO_LPC17xx.h"
 
 #if defined (LPC175x_6x)
   #include "LPC17xx.h"
 #elif defined (LPC177x_8x)
   #include "LPC177x_8x.h"
 #endif
-
-#include "GPIO_LPC17xx.h"
-
 
 #define LPC_GPIO(n)             ((LPC_GPIO_TypeDef *)(LPC_GPIO0_BASE + 0x00020*n))
 
@@ -49,10 +49,10 @@
 void GPIO_PortClock (uint32_t clock) {
 
   if (clock) {
-    LPC_SC->PCONP |=  (1 << 15);
+    LPC_SC->PCONP |=  (1U << 15);
   }
   else {
-    LPC_SC->PCONP &= ~(1 << 15);
+    LPC_SC->PCONP &= ~(1U << 15);
   }
 }
 
@@ -94,7 +94,7 @@ void GPIO_PinWrite (uint32_t port_num, uint32_t pin_num, uint32_t val) {
   \return      pin value (0 or 1)
 */
 uint32_t GPIO_PinRead (uint32_t port_num, uint32_t pin_num) {
-  return ((LPC_GPIO(port_num)->PIN & (1UL << pin_num)) ? (1) : (0));
+  return ((LPC_GPIO(port_num)->PIN & (1UL << pin_num)) ? (1U) : (0U));
 }
 
 /**

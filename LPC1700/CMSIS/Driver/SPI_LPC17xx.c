@@ -1,5 +1,5 @@
-/* -------------------------------------------------------------------------- 
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All 
+/* --------------------------------------------------------------------------
+ * Copyright (c) 2013-2021 Arm Limited (or its affiliates). All
  * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -17,10 +17,10 @@
  * limitations under the License.
  *
  *
- * $Date:        10. Januar 2020
+ * $Date:        02. December 2021
  * $Revision:    V2.3
  *
- * Driver:       Driver_SPI2
+ * Driver:       Driver_SPI2 (only LPC175x/6x)
  * Configured:   via RTE_Device.h configuration file
  * Project:      SPI Driver for NXP LPC17xx
  * --------------------------------------------------------------------------
@@ -29,7 +29,7 @@
  *
  *   Configuration Setting                 Value   SPI Interface
  *   ---------------------                 -----   -------------
- *   Connect to hardware via Driver_SPI# = 2       use SPI2
+ *   Connect to hardware via Driver_SPI# = 2       use SPI
  * -------------------------------------------------------------------------- */
 
 /* History:
@@ -521,7 +521,7 @@ set_speed:
       spi->xfer->def_val = (uint16_t)(arg & 0xFFFFU);
       return ARM_DRIVER_OK;
 
-    case ARM_SPI_CONTROL_SS:                // Control Slave Select; arg = 0:inactive, 1:active 
+    case ARM_SPI_CONTROL_SS:                // Control Slave Select; arg = 0:inactive, 1:active
       if (((spi->info->mode & ARM_SPI_CONTROL_Msk)        != ARM_SPI_MODE_MASTER)  ||
           ((spi->info->mode & ARM_SPI_SS_MASTER_MODE_Msk) != ARM_SPI_SS_MASTER_SW)) {
         return ARM_DRIVER_ERROR;

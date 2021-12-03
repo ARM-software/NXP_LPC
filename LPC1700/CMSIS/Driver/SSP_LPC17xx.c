@@ -1,5 +1,5 @@
 /* --------------------------------------------------------------------------
- * Copyright (c) 2013-2020 Arm Limited (or its affiliates). All
+ * Copyright (c) 2013-2021 Arm Limited (or its affiliates). All
  * rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -17,10 +17,10 @@
  * limitations under the License.
  *
  *
- * $Date:        10. Januar 2020
- * $Revision:    V2.9
+ * $Date:        02. December 2021
+ * $Revision:    V2.10
  *
- * Driver:       Driver_SPI0, Driver_SPI1, Driver_SPI2
+ * Driver:       Driver_SPI0, Driver_SPI1, Driver_SPI2 (only LPC178x/7x)
  * Configured:   via RTE_Device.h configuration file
  * Project:      SPI (SSP used for SPI) Driver for NXP LPC17xx
  * --------------------------------------------------------------------------
@@ -31,12 +31,12 @@
  *   ---------------------                 -----   -------------
  *   Connect to hardware via Driver_SPI# = 0       use SPI0 (SSP0)
  *   Connect to hardware via Driver_SPI# = 1       use SPI1 (SSP1)
- *   Connect to hardware via Driver_SPI# = 2       use SPI2 (SPI)
+ *   Connect to hardware via Driver_SPI# = 2       use SPI2 (SSP2)
  * -------------------------------------------------------------------------- */
 
 /* History:
  *  Version 2.10
- *    - Fixed build issue with LPC1700
+ *    - Corrected SSP2 handling
  *  Version 2.9
  *    - Removed minor Compiler warnings
  *  Version 2.8
@@ -297,7 +297,7 @@ static SSP_RESOURCES SSP1_Resources = {
 };
 #endif /* RTE_SSP1 */
 
-#if defined(RTE_SSP2) && (RTE_SSP2)
+#if (RTE_SSP2)
 static SSP_INFO          SSP2_Info = { 0 };
 static SSP_TRANSFER_INFO SSP2_Xfer = { 0 };
 static const PIN         SSP2_pin_sck  = {RTE_SSP2_SCK_PORT,  RTE_SSP2_SCK_BIT};
